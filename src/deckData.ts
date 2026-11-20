@@ -1,4 +1,4 @@
-import { cardImages, type ScryfallCard } from './cards';
+import { cardImages, isOutsidePaper, type ScryfallCard } from './cards';
 import { parseDecklist } from './decklist';
 import { inferRoles, mergeRoles, type KnownCard, type RoleId } from './deckAnalyze';
 import { formatSpec, parseDeckFile, type DeckCardLine, type DeckFile, type DeckFormat, type DeckRecord } from './deckModel';
@@ -29,6 +29,10 @@ export interface CachedPrinting {
   priceUsd: number | null;
   image: string;
   producedMana: string[];
+  borderColor?: string;
+  setType?: string;
+  games?: string[];
+  securityStamp?: string;
 }
 
 const memoryCards = new Map<string, CachedPrinting>();
@@ -83,6 +87,10 @@ export function rememberPrinting(card: ScryfallCard): CachedPrinting {
     priceUsd: card.prices?.usd != null ? Number(card.prices.usd) : null,
     image: cardImages(card).front ?? '',
     producedMana: card.produced_mana ?? [],
+    borderColor: card.border_color,
+    setType: card.set_type,
+    games: card.games,
+    securityStamp: card.security_stamp,
   };
   memoryCards.set(card.id, printing);
   memoryCards.set(`${card.set}|${card.collector_number.toLowerCase()}`, printing);
@@ -353,19 +361,19 @@ async function idbGet(key: string): Promise<string | null> {
   return value;
 }
 
-export function deckCardQuery(text: string, format: DeckFormat, identity: string[], restrict: boolean): string {
+export function deckCardQuery(text: string, format: DeckFormat, identity: string[], restrict: boolean, ignoreLegality = false): string {
   const raw = text.trim();
   if (!restrict) return raw;
   const spec = formatSpec(format);
   const parts = [raw];
-  if (spec.legality) parts.push(`legal:${spec.legality}`);
+  if (!ignoreLegality && spec.legality) parts.push(`legal:${spec.legality}`);
   if (spec.commander && identity.length > 0) parts.push(`id<=${identity.join('').toLowerCase()}`);
   if (!/game:/.test(raw)) parts.push('game:paper');
   return parts.filter(Boolean).join(' ');
 }
 
-export async function upgradeSearch(identity: string[], format: DeckFormat): Promise<CachedPrinting[]> {
-  const query = deckCardQuery('', format, identity, true) || 'game:paper';
+export async function upgradeSearch(identity: string[], format: DeckFormat, ignoreLegality = false): Promise<CachedPrinting[]> {
+  const query = deckCardQuery('', format, identity, true, ignoreLegality) || 'game:paper';
   const cards = await searchOrdered(query, 'edhrec');
   return cards.map((card) => rememberPrinting(card));
 }
@@ -379,6 +387,7 @@ export async function findCommanders(
   format: DeckFormat,
   kind: 'commander' | 'partner' | 'background',
   signal?: AbortSignal,
+  ignoreLegality = false,
 ): Promise<CachedPrinting[]> {
   const names = await autocomplete(query, signal);
   if (names.length === 0) return [];
@@ -389,8 +398,11 @@ export async function findCommanders(
     ? 't:background'
     : kind === 'partner'
       ? 'is:commander (keyword:partner OR keyword:"friends forever" OR o:"partner with")'
-      : 'is:commander';
-  const cards = await searchOrdered(`(${clause}) ${kindQuery} legal:${legal}`, 'name', signal);
+      : ignoreLegality
+        ? 't:legendary t:creature'
+        : 'is:commander';
+  const legalQuery = ignoreLegality ? '' : `legal:${legal}`;
+  const cards = await searchOrdered(`(${clause}) ${kindQuery} ${legalQuery}`.trim(), 'name', signal);
   return cards.map((card) => rememberPrinting(card));
 }
 
@@ -399,12 +411,13 @@ export async function findLegalNames(
   format: DeckFormat,
   identity: string[],
   signal?: AbortSignal,
+  ignoreLegality = false,
 ): Promise<string[]> {
   const names = await autocomplete(query, signal);
   if (names.length === 0) return [];
   try {
     const clause = names.slice(0, 12).map((name) => `!"${escapeExact(name)}"`).join(' OR ');
-    const cards = await searchOrdered(deckCardQuery(`(${clause})`, format, identity, true), 'name', signal);
+    const cards = await searchOrdered(deckCardQuery(`(${clause})`, format, identity, true, ignoreLegality), 'name', signal);
     const allowed = new Set(cards.map((card) => card.name));
     return names.filter((name) => allowed.has(name));
   } catch (error) {
@@ -431,6 +444,7 @@ export function knownFromPrinting(printing: CachedPrinting, qty: number): KnownC
     image: printing.image,
     producedMana: printing.producedMana,
     roles: mergeRoles(inferRoles(printing.typeLine, printing.oracleText), tagsFor(printing.oracleId)),
+    playtest: isOutsidePaper(printing),
   };
 }
 

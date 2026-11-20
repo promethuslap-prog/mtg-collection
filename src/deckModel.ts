@@ -42,6 +42,8 @@ export interface DeckRecord {
   commanderBoard?: DeckCardLine[];
   origin?: DeckOrigin;
   pasted?: boolean;
+  ignoreLegality?: boolean;
+  includeUncards?: boolean;
 }
 
 export interface DeckFile {

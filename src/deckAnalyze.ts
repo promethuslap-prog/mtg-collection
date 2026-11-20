@@ -16,6 +16,7 @@ export interface KnownCard {
   oracleText: string;
   keywords: string[];
   legality: string;
+  playtest?: boolean;
   edhrecRank: number | null;
   priceUsd: number | null;
   image: string;
@@ -230,13 +231,14 @@ export function listDeckIssues(deck: DeckRecord, cards: KnownCard[], identity: s
   const commanderNames = new Set(deck.commanders.map((name) => normalizeName(name)));
   const hasCommander = deck.commanders.length > 0;
   for (const card of cards) {
-    if (spec.legality && card.legality === 'banned') issues.push(`${card.name} is banned in ${spec.label}.`);
-    else if (spec.legality && card.legality === 'not_legal') issues.push(`${card.name} is not legal in ${spec.label}.`);
+    if (!deck.ignoreLegality && spec.legality && card.legality === 'banned') issues.push(`${card.name} is banned in ${spec.label}.`);
+    else if (!deck.ignoreLegality && spec.legality && card.legality === 'not_legal') issues.push(`${card.name} is not legal in ${spec.label}.`);
     if (spec.commander && hasCommander && card.colorIdentity.some((color) => !identity.includes(color))) {
       issues.push(`${card.name} is outside the commander’s color identity.`);
     }
     const basic = /basic/i.test(card.typeLine);
-    if (spec.singleton && !basic && card.qty > 1 && !commanderNames.has(normalizeName(card.name))) {
+    const anyNumber = /a deck can have any number of cards named/i.test(card.oracleText);
+    if (spec.singleton && !basic && !anyNumber && card.qty > 1 && !commanderNames.has(normalizeName(card.name))) {
       issues.push(`${card.name} appears ${card.qty} times in a singleton format.`);
     }
     if (!spec.singleton && spec.legality && !basic && card.qty > 4) {
@@ -254,6 +256,19 @@ export function listDeckIssues(deck: DeckRecord, cards: KnownCard[], identity: s
     issues.push(`${cardCount} cards. ${label} decks need at least ${target}.`);
   }
   return issues;
+}
+
+export function legalityNotes(deck: DeckRecord, cards: KnownCard[]): string[] {
+  if (!deck.ignoreLegality) return [];
+  const spec = formatSpec(deck.format);
+  if (!spec.legality) return [];
+  const notes: string[] = [];
+  for (const card of cards) {
+    if (card.legality === 'banned') notes.push(`${card.name} is banned in ${spec.label}.`);
+    else if (card.legality === 'restricted') notes.push(`${card.name} is restricted in ${spec.label}.`);
+    else if (card.legality === 'not_legal') notes.push(card.playtest ? `${card.name} is an Un-set, acorn, or digital card.` : `${card.name} is not legal in ${spec.label}.`);
+  }
+  return notes;
 }
 
 function countRole(cards: KnownCard[], role: RoleId): number {
@@ -302,7 +317,8 @@ function rankOwned(
     const spec = formatSpec(deck.format);
     if (spec.singleton && have > 0) return null;
     if (!spec.singleton && have >= 4) return null;
-    if (spec.legality && (card.legality === 'banned' || card.legality === 'not_legal')) return null;
+    if (!deck.ignoreLegality && spec.legality && (card.legality === 'banned' || card.legality === 'not_legal' || card.legality === 'restricted')) return null;
+    if (deck.ignoreLegality && !deck.includeUncards && card.playtest) return null;
     if (spec.commander && deck.commanders.length > 0 && card.colorIdentity.some((color) => !identity.includes(color))) return null;
     let score = 1;
     const role = card.roles.find((item) => lowRoles.has(item)) ?? primaryRole(card.roles);

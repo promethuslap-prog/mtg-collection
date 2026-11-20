@@ -27,6 +27,7 @@ import { downloadText } from '../io';
 import { normalizeName } from '../text';
 import { createUserDeck, toMoxfieldText } from '../userDecks';
 import type { CollectionEntry } from '../types';
+import { isOutsidePaper } from '../cards';
 import { BRACKETS, bracketLabel, loadGameChangers, type BracketId } from '../brackets';
 import { Pips } from './bits';
 
@@ -61,7 +62,10 @@ export function DeckBuilder({ entries, decks, onClose, onSave }: DeckBuilderProp
   const [onlyOwned, setOnlyOwned] = useState(true);
   const [buyLimit, setBuyLimit] = useState(5);
   const [allowInOtherDecks, setAllowInOtherDecks] = useState(true);
+  const savedCasual = loadCasualChoice();
   const [bracket, setBracket] = useState<BracketId>(2);
+  const [ignoreLegality, setIgnoreLegality] = useState(savedCasual.ignoreLegality);
+  const [includeUncards, setIncludeUncards] = useState(savedCasual.includeUncards);
   const [pool, setPool] = useState<PoolCard[]>([]);
   const [ranked, setRanked] = useState<RankedCommander[]>([]);
   const [commander, setCommander] = useState<PoolCard | null>(null);
@@ -87,19 +91,23 @@ export function DeckBuilder({ entries, decks, onClose, onSave }: DeckBuilderProp
       if (cancel) return;
       const next = collectPool(entries, decks);
       setPool(next);
-      setRanked(rankOwnedCommanders(next, 'commander'));
+      setRanked(rankOwnedCommanders(next, 'commander', { ignoreLegality, includeUncards }));
       setStatus('');
       void tagOracleIds(next.map((card) => card.oracleId)).then(() => {
         if (cancel) return;
         const tagged = collectPool(entries, decks);
         setPool(tagged);
-        setRanked(rankOwnedCommanders(tagged, 'commander'));
+        setRanked(rankOwnedCommanders(tagged, 'commander', { ignoreLegality, includeUncards }));
       }).catch((error) => console.warn(error));
     })();
     return () => {
       cancel = true;
     };
   }, [entries, decks.map((deck) => `${deck.id}:${playingLines(deck).length}`).join('|')]);
+
+  useEffect(() => {
+    setRanked(rankOwnedCommanders(pool, 'commander', { ignoreLegality, includeUncards }));
+  }, [pool, ignoreLegality, includeUncards]);
 
   useEffect(() => {
     const text = query.trim();
@@ -138,11 +146,12 @@ export function DeckBuilder({ entries, decks, onClose, onSave }: DeckBuilderProp
     let extras: PoolCard[] = [];
     if (!onlyOwned && buyLimit > 0) {
       try {
-        const found = await searchOrdered(extraQuery(format, colorsForBuild, theme), 'edhrec');
+        const found = await searchOrdered(extraQuery(format, colorsForBuild, theme, ignoreLegality), 'edhrec');
         const owned = new Set(pool.map((card) => normalizeName(card.name)));
         extras = found
           .map((card) => rememberPrinting(card))
           .filter((card) => !owned.has(normalizeName(card.name)))
+          .filter((card) => includeUncards || !isOutsidePaper(card))
           .slice(0, 40)
           .map((card) => printingToPool(card, 1, [], false));
       } catch (error) {
@@ -161,6 +170,8 @@ export function DeckBuilder({ entries, decks, onClose, onSave }: DeckBuilderProp
       extras,
       bracket: format === 'commander' ? bracket : 'any',
       gameChangers,
+      ignoreLegality,
+      includeUncards: ignoreLegality && includeUncards,
     };
     const built = buildDeck(pool, nextRequest);
     setRequest(nextRequest);
@@ -248,6 +259,24 @@ export function DeckBuilder({ entries, decks, onClose, onSave }: DeckBuilderProp
               </label>
             </>
           )}
+          <label className="check">
+            <input type="checkbox" checked={ignoreLegality} onChange={(event) => {
+              const next = event.target.checked;
+              setIgnoreLegality(next);
+              if (!next) setIncludeUncards(false);
+              saveCasualChoice(next, next ? includeUncards : false);
+            }} />
+            Ignore banned & illegal cards (casual)
+          </label>
+          {ignoreLegality && (
+            <label className="check">
+              <input type="checkbox" checked={includeUncards} onChange={(event) => {
+                setIncludeUncards(event.target.checked);
+                saveCasualChoice(ignoreLegality, event.target.checked);
+              }} />
+              Include Un-/acorn/digital cards
+            </label>
+          )}
           <label className="check"><input type="checkbox" checked={onlyOwned} onChange={(event) => setOnlyOwned(event.target.checked)} /> Only cards I own</label>
           {!onlyOwned && (
             <label className="field budget">Cards to buy
@@ -261,7 +290,12 @@ export function DeckBuilder({ entries, decks, onClose, onSave }: DeckBuilderProp
       {result && request && (
         <BuilderResult
           result={result}
-          onSave={() => onSave(recordFromBuilt(result))}
+          onSave={() => {
+            const deck = recordFromBuilt(result);
+            if (ignoreLegality) deck.ignoreLegality = true;
+            if (ignoreLegality && includeUncards) deck.includeUncards = true;
+            onSave(deck);
+          }}
           onRegenerate={() => void build(request.seed + 1, request.commander)}
           onSwap={(name) => setResult(swapBuiltCard(result, name, source, request))}
           onBack={() => setResult(null)}
@@ -293,6 +327,14 @@ function BuilderResult({
       <p className="summary-line" data-build-summary={result.summary}>{result.summary}</p>
       {result.bracket && result.bracket !== 'any' && (
         <p className="hint" data-bracket={result.bracket}>Building at {bracketLabel(result.bracket)}</p>
+      )}
+      {result.ignoreLegality && <p className="origin-tag" data-casual-badge>Casual: legality ignored</p>}
+      {result.casualCards && result.casualCards.length > 0 && (
+        <ul className="suggest-list">
+          {result.casualCards.map((card) => (
+            <li key={card.name}><strong>{card.name}</strong> <span className="muted">{card.tag}</span></li>
+          ))}
+        </ul>
       )}
       {result.commander && (
         <p className="hint">Commander: {result.commander.name}{result.commanderOwned ? ' · owned' : ' · to buy'}</p>
@@ -446,13 +488,36 @@ function printingToPool(card: CachedPrinting, qty: number, inDecks: string[], ow
     scryfallUri: uri || `https://scryfall.com/card/${card.set}/${card.collectorNumber}`,
     owned,
     inDecks,
+    borderColor: card.borderColor,
+    setType: card.setType,
+    games: card.games,
+    securityStamp: card.securityStamp,
   };
 }
 
-function extraQuery(format: BuildFormat, colors: string[], theme: string): string {
+function extraQuery(format: BuildFormat, colors: string[], theme: string, ignoreLegality: boolean): string {
   const spec = formatSpec(format);
-  const parts = [theme.trim(), spec.legality ? `legal:${spec.legality}` : '', colors.length ? `id<=${colors.join('').toLowerCase()}` : '', 'game:paper'];
+  const parts = [theme.trim(), !ignoreLegality && spec.legality ? `legal:${spec.legality}` : '', colors.length ? `id<=${colors.join('').toLowerCase()}` : '', 'game:paper'];
   return parts.filter(Boolean).join(' ');
+}
+
+const CASUAL_KEY = 'mtg-builder-casual.v1';
+
+function loadCasualChoice(): { ignoreLegality: boolean; includeUncards: boolean } {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(CASUAL_KEY) || '{}') as { ignoreLegality?: boolean; includeUncards?: boolean };
+    return { ignoreLegality: parsed.ignoreLegality === true, includeUncards: parsed.includeUncards === true };
+  } catch {
+    return { ignoreLegality: false, includeUncards: false };
+  }
+}
+
+function saveCasualChoice(ignoreLegality: boolean, includeUncards: boolean): void {
+  try {
+    localStorage.setItem(CASUAL_KEY, JSON.stringify({ ignoreLegality, includeUncards }));
+  } catch {
+    /* ignore quota */
+  }
 }
 
 function groupCards(cards: BuiltDeck['cards']): Array<{ type: string; cards: BuiltDeck['cards'] }> {

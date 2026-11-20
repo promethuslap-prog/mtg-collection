@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { isOutsidePaper } from '../cards';
 import { loadGameChangers, reviewCards, type BracketReview } from '../brackets';
 import { analyzeDeck, combinedIdentity, type DeckReport, type KnownCard } from '../deckAnalyze';
 import {
@@ -299,7 +300,7 @@ function DeckPage({
       ].filter(Boolean);
       await tagOracleIds(oracleIds);
       if (cancel) return;
-      const upgrades = (await upgradeSearch(identity, deck.format)).map((printing) => {
+      const upgrades = (await upgradeSearch(identity, deck.format, Boolean(deck.ignoreLegality))).filter((printing) => deck.includeUncards || !isOutsidePaper(printing)).map((printing) => {
         const card = knownFromPrinting(printing, 1);
         card.legality = legalityFor(printing, deck.format);
         return card;

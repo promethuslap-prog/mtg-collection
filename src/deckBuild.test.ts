@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDeck, canBeCommander, rankOwnedCommanders, suggestColors, swapBuiltCard, type PoolCard } from './deckBuild';
+import { buildDeck, canBeCommander, passesLegality, rankOwnedCommanders, suggestColors, swapBuiltCard, type PoolCard } from './deckBuild';
 import { reviewCards } from './brackets';
 
 function card(partial: Partial<PoolCard> & { name: string }): PoolCard {
@@ -29,6 +29,10 @@ function card(partial: Partial<PoolCard> & { name: string }): PoolCard {
     extraTurn: partial.extraTurn,
     tutor: partial.tutor,
     fastMana: partial.fastMana,
+    borderColor: partial.borderColor,
+    setType: partial.setType,
+    games: partial.games,
+    securityStamp: partial.securityStamp,
   };
 }
 
@@ -210,5 +214,52 @@ describe('deck builder', () => {
       { name: 'Gamble', typeLine: 'Sorcery', oracleText: 'Search your library for a card.', cmc: 1, gameChanger: true },
     ], new Set());
     expect(review.estimated).toBe(4);
+  });
+
+  it('includes a banned card only when casual legality is ignored', () => {
+    const lotus = card({
+      name: 'Jeweled Lotus',
+      colorIdentity: [],
+      manaCost: '{0}',
+      cmc: 0,
+      typeLine: 'Artifact',
+      oracleText: '{T}, Sacrifice Jeweled Lotus: Add three mana of any one color.',
+      roles: ['ramp'],
+      legalities: { commander: 'banned' },
+      edhrecRank: 15,
+    });
+    const squirrel = card({
+      name: 'AWOL',
+      colorIdentity: [],
+      typeLine: 'Instant',
+      oracleText: 'Target creature is removed.',
+      legalities: { commander: 'not_legal' },
+      borderColor: 'silver',
+      setType: 'funny',
+      edhrecRank: 5000,
+    });
+    const pool = [...redPool(), lotus, squirrel];
+    const request = {
+      format: 'commander' as const,
+      commander: redPool()[0],
+      colors: ['R'],
+      theme: '',
+      onlyOwned: true,
+      buyLimit: 0,
+      allowInOtherDecks: true,
+      seed: 1,
+      bracket: 2 as const,
+    };
+    const strict = buildDeck(pool, request);
+    const casual = buildDeck(pool, { ...request, ignoreLegality: true });
+    expect(strict.cards.some((item) => item.card.name === 'Jeweled Lotus')).toBe(false);
+    expect(casual.cards.some((item) => item.card.name === 'Jeweled Lotus')).toBe(true);
+    expect(casual.cards.some((item) => item.card.name === 'AWOL')).toBe(false);
+    expect(casual.casualCards?.some((item) => item.name === 'Jeweled Lotus' && item.tag === 'Banned in Commander')).toBe(true);
+    expect(casual.cards.reduce((sum, item) => sum + item.qty, 0)).toBe(99);
+    expect(passesLegality(squirrel, 'commander', { ignoreLegality: true, includeUncards: false })).toBe(false);
+    expect(passesLegality(squirrel, 'commander', { ignoreLegality: true, includeUncards: true })).toBe(true);
+    expect(passesLegality(lotus, 'commander', { ignoreLegality: false })).toBe(false);
+    expect(passesLegality(lotus, 'commander', { ignoreLegality: true })).toBe(true);
   });
 });

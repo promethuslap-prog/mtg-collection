@@ -87,6 +87,8 @@ export function duplicateDeck(source: DeckRecord): DeckRecord {
     maybeboard: (source.maybeboard ?? []).map((line) => ({ ...line })),
     commanderBoard,
     origin: 'local',
+    ...(source.ignoreLegality ? { ignoreLegality: true } : {}),
+    ...(source.includeUncards ? { includeUncards: true } : {}),
   };
 }
 
@@ -279,6 +281,8 @@ function normalizeDeck(value: unknown): DeckRecord | null {
     maybeboard: parseLines(deck.maybeboard),
     commanderBoard,
     origin: 'local',
+    ...(deck.ignoreLegality ? { ignoreLegality: true } : {}),
+    ...(deck.includeUncards ? { includeUncards: true } : {}),
   };
 }
 

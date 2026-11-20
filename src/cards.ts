@@ -38,6 +38,8 @@ export interface ScryfallCard {
   finishes?: string[];
   frame?: string;
   border_color?: string;
+  security_stamp?: string;
+  set_type?: string;
   frame_effects?: string[];
   promo?: boolean;
   promo_types?: string[];
@@ -50,6 +52,18 @@ export interface ScryfallCard {
   scryfall_uri?: string;
   artist?: string;
   games?: string[];
+}
+
+const FUNNY_SETS = new Set(['unh', 'ugl', 'ust', 'und', 'unf']);
+
+export function isOutsidePaper(card: { borderColor?: string; border_color?: string; setType?: string; set_type?: string; games?: string[]; securityStamp?: string; security_stamp?: string; set?: string }): boolean {
+  const border = card.borderColor ?? card.border_color ?? '';
+  const setType = card.setType ?? card.set_type ?? '';
+  const stamp = card.securityStamp ?? card.security_stamp ?? '';
+  if (border === 'silver' || stamp === 'acorn' || setType === 'funny' || setType === 'alchemy') return true;
+  if (card.set && FUNNY_SETS.has(card.set.toLowerCase())) return true;
+  if (card.games && card.games.length > 0 && !card.games.includes('paper')) return true;
+  return false;
 }
 
 export interface CardIdentifier {

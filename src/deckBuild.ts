@@ -1,3 +1,4 @@
+import { isOutsidePaper } from './cards';
 import { bracketAdjustment, bracketLabel, detectSignals, reviewCards, skipReason, type BracketId, type BracketReview, type SkipNote } from './brackets';
 import { inferRoles, type RoleId } from './deckAnalyze';
 import { formatSpec } from './deckModel';
@@ -30,6 +31,10 @@ export interface PoolCard {
   extraTurn?: boolean;
   tutor?: boolean;
   fastMana?: boolean;
+  borderColor?: string;
+  setType?: string;
+  games?: string[];
+  securityStamp?: string;
 }
 
 export interface BuildRequest {
@@ -44,6 +49,8 @@ export interface BuildRequest {
   extras?: PoolCard[];
   bracket?: BracketId;
   gameChangers?: Set<string>;
+  ignoreLegality?: boolean;
+  includeUncards?: boolean;
 }
 
 export interface BuiltCard {
@@ -81,6 +88,8 @@ export interface BuiltDeck {
   bracket?: BracketId;
   check?: BracketReview;
   skipped?: SkipNote[];
+  ignoreLegality?: boolean;
+  casualCards?: Array<{ name: string; tag: string }>;
 }
 
 export interface RankedCommander {
@@ -95,19 +104,18 @@ const BASIC_NAME: Record<string, string> = { W: 'Plains', U: 'Island', B: 'Swamp
 const BASIC_NAMES = new Set(Object.values(BASIC_NAME).map((name) => name.toLowerCase()));
 const STOP = new Set(['that', 'with', 'your', 'this', 'from', 'each', 'target', 'card', 'cards', 'when', 'whenever', 'until', 'deals', 'damage', 'creature', 'creatures', 'player', 'players', 'control', 'onto', 'battlefield', 'then', 'they', 'them', 'have', 'gains', 'gain', 'loses', 'lose', 'where', 'number', 'equal', 'among', 'other']);
 
-export function canBeCommander(card: PoolCard): boolean {
+export function canBeCommander(card: PoolCard, options?: LegalityOptions): boolean {
+  if (!passesLegality(card, 'commander', options)) return false;
   const type = card.typeLine.toLowerCase();
   const text = `${card.oracleText} ${card.keywords.join(' ')}`.toLowerCase();
-  const status = card.legalities.commander ?? '';
-  if (status === 'banned' || status === 'not_legal') return false;
   if (type.includes('legendary') && type.includes('creature')) return true;
   return /can be your commander/.test(text);
 }
 
-export function rankOwnedCommanders(pool: PoolCard[], format: BuildFormat = 'commander'): RankedCommander[] {
-  const commanders = pool.filter((card) => card.owned && card.qty > 0 && canBeCommander(card) && isLegal(card, format));
+export function rankOwnedCommanders(pool: PoolCard[], format: BuildFormat = 'commander', options?: LegalityOptions): RankedCommander[] {
+  const commanders = pool.filter((card) => card.owned && card.qty > 0 && canBeCommander(card, options) && passesLegality(card, format, options));
   const ranked = commanders.map((card) => {
-    const playable = pool.filter((other) => other.owned && other.name !== card.name && fits(other, card.colorIdentity, format));
+    const playable = pool.filter((other) => other.owned && other.name !== card.name && fits(other, card.colorIdentity, format, options));
     const synergy = playable.filter((other) => synergyScore(other, card, '') > 0).length;
     const score = playable.length * 2 + synergy * 3 + quality(card);
     return { card, playable: playable.length, synergy, score };
@@ -158,7 +166,7 @@ export function buildDeck(pool: PoolCard[], request: BuildRequest): BuiltDeck {
     if (used.has(normalizeName(card.name))) return false;
     if (!card.owned && buyLimit <= 0) return false;
     if (!request.allowInOtherDecks && card.inDecks.length > 0 && !isBasic(card)) return false;
-    return fits(card, identity, format) || (isBasic(card) && identity.includes(basicColor(card) ?? ''));
+    return fits(card, identity, format, request) || (isBasic(card) && identity.includes(basicColor(card) ?? ''));
   });
   const ownedByName = new Map<string, PoolCard>();
   for (const card of available) {
@@ -332,6 +340,8 @@ export function buildDeck(pool: PoolCard[], request: BuildRequest): BuiltDeck {
     bracket,
     check: reviewed,
     skipped: [...skipped.entries()].map(([name, reason]) => ({ name, reason })),
+    ignoreLegality: Boolean(request.ignoreLegality),
+    casualCards: request.ignoreLegality ? casualList(trimmed, format) : [],
   };
 }
 
@@ -345,7 +355,7 @@ export function swapBuiltCard(built: BuiltDeck, name: string, pool: PoolCard[], 
     if (used.has(normalizeName(card.name)) || isBasic(card) || isLand(card) !== (target.role === 'land')) return false;
     if (!card.owned && request.onlyOwned) return false;
     if (!request.allowInOtherDecks && card.inDecks.length > 0) return false;
-    if (!fits(card, identity, built.format)) return false;
+    if (!fits(card, identity, built.format, request)) return false;
     const signals = detectSignals(card, request.gameChangers ?? new Set());
     const marked = {
       ...card,
@@ -513,6 +523,7 @@ function pickNear(options: Array<{ card: PoolCard; score: number }>, rng: () => 
 
 function copyCount(card: PoolCard, format: BuildFormat, room: number): number {
   if (isBasic(card)) return Math.max(1, Math.min(room, 1));
+  if (anyNumber(card)) return Math.max(1, Math.min(card.owned ? card.qty : 1, room));
   if (formatSpec(format).singleton || !card.owned) return 1;
   return Math.max(1, Math.min(4, card.qty, room));
 }
@@ -660,8 +671,32 @@ function makeBasic(color: string, owned?: PoolCard): PoolCard {
   };
 }
 
-function fits(card: PoolCard, identity: string[], format: BuildFormat): boolean {
-  if (!isLegal(card, format)) return false;
+interface LegalityOptions {
+  ignoreLegality?: boolean;
+  includeUncards?: boolean;
+}
+
+export function passesLegality(card: PoolCard, format: BuildFormat, options?: LegalityOptions): boolean {
+  if (isOutsidePaper(card) && !options?.includeUncards) return false;
+  if (options?.ignoreLegality) return true;
+  return isLegal(card, format);
+}
+
+export function casualList(cards: BuiltCard[], format: BuildFormat): Array<{ name: string; tag: string }> {
+  const label = formatSpec(format).label;
+  const key = formatSpec(format).legality;
+  const list: Array<{ name: string; tag: string }> = [];
+  for (const card of cards) {
+    const status = key ? card.card.legalities[key] ?? '' : '';
+    if (status === 'banned') list.push({ name: card.card.name, tag: `Banned in ${label}` });
+    else if (status === 'restricted') list.push({ name: card.card.name, tag: `Restricted in ${label}` });
+    else if (status === 'not_legal') list.push({ name: card.card.name, tag: isOutsidePaper(card.card) ? 'Un-set, acorn, or digital' : `Not legal in ${label}` });
+  }
+  return list;
+}
+
+function fits(card: PoolCard, identity: string[], format: BuildFormat, options?: LegalityOptions): boolean {
+  if (!passesLegality(card, format, options)) return false;
   if (isBasic(card)) return identity.includes(basicColor(card) ?? '');
   return card.colorIdentity.every((color) => identity.includes(color));
 }
@@ -671,6 +706,10 @@ function isLegal(card: PoolCard, format: BuildFormat): boolean {
   if (!key) return true;
   const status = card.legalities[key] ?? '';
   return status !== 'banned' && status !== 'not_legal' && status !== '';
+}
+
+function anyNumber(card: PoolCard): boolean {
+  return /a deck can have any number of cards named/i.test(card.oracleText);
 }
 
 function isLand(card: PoolCard): boolean {

@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react';
-import type { ScryfallCard } from '../cards';
-import { combinedIdentity, listDeckIssues, type KnownCard } from '../deckAnalyze';
+import { isOutsidePaper, type ScryfallCard } from '../cards';
+import { combinedIdentity, legalityNotes, listDeckIssues, type KnownCard } from '../deckAnalyze';
 import {
   deckCardQuery,
   findCommanders,
@@ -45,6 +45,7 @@ export function DeckEditor({ deck, entries, decks, onChange, onDone }: DeckEdito
   const [section, setSection] = useState<DeckSectionName>('mainboard');
   const [identity, setIdentity] = useState<string[]>([]);
   const [issues, setIssues] = useState<string[]>([]);
+  const [notes, setNotes] = useState<string[]>([]);
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [ownedOnly, setOwnedOnly] = useState(false);
@@ -82,12 +83,16 @@ export function DeckEditor({ deck, entries, decks, onChange, onDone }: DeckEdito
         return toKnown(line, printing, [], deck.format) ?? placeholder(line);
       }));
       const next = listDeckIssues(deck, known, identity);
+      const casual = legalityNotes(deck, known);
       for (const line of deck.mainboard) {
         if (deck.commanders.some((name) => normalizeName(name) === normalizeName(line.name))) {
           next.push(`${line.name} is already in the command zone.`);
         }
       }
-      if (!cancel) setIssues([...new Set(next)]);
+      if (!cancel) {
+        setIssues([...new Set(next)]);
+        setNotes([...new Set(casual)]);
+      }
     })().catch((error) => console.warn(error));
     return () => {
       cancel = true;
@@ -107,7 +112,7 @@ export function DeckEditor({ deck, entries, decks, onChange, onDone }: DeckEdito
           const names = ownedOnly
             ? ownedSuggestions(entries, text, deck.format, identity, restrict)
             : restrict
-              ? await findLegalNames(text, deck.format, identity, controller.signal)
+              ? await findLegalNames(text, deck.format, identity, controller.signal, Boolean(deck.ignoreLegality))
               : await autocomplete(text, controller.signal);
           if (!controller.signal.aborted) setSuggestions(names);
         } catch (error) {
@@ -120,7 +125,7 @@ export function DeckEditor({ deck, entries, decks, onChange, onDone }: DeckEdito
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [query, ownedOnly, restrict, entries, deck.format, identity]);
+  }, [query, ownedOnly, restrict, entries, deck.format, deck.ignoreLegality, identity]);
 
   function chooseName(name: string) {
     setQuery(name);
@@ -163,8 +168,9 @@ export function DeckEditor({ deck, entries, decks, onChange, onDone }: DeckEdito
     setSearching(true);
     setSearchNote('');
     try {
-      const cards = await searchOrdered(deckCardQuery(raw, deck.format, identity, restrict), 'name');
+      const cards = await searchOrdered(deckCardQuery(raw, deck.format, identity, restrict, Boolean(deck.ignoreLegality)), 'name');
       let next = cards.map((card) => rememberPrinting(card));
+      if (!deck.includeUncards) next = next.filter((card) => !isOutsidePaper(card));
       if (ownedOnly) {
         const owned = new Set(entries.map((entry) => normalizeName(entry.name)));
         next = next.filter((card) => owned.has(normalizeName(card.name)));
@@ -255,9 +261,31 @@ export function DeckEditor({ deck, entries, decks, onChange, onDone }: DeckEdito
         {deckSize(deck)} / {formatTarget(deck.format)} {spec.label}
         {spec.exact ? '' : '+'}
       </p>
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={deck.ignoreLegality === true}
+          onChange={(event) => onChange({ ...deck, ignoreLegality: event.target.checked, includeUncards: event.target.checked ? deck.includeUncards : false })}
+        />
+        Ignore banned & illegal cards (casual)
+      </label>
+      {deck.ignoreLegality && (
+        <>
+          <p className="origin-tag">Casual: legality ignored</p>
+          <label className="check">
+            <input type="checkbox" checked={deck.includeUncards === true} onChange={(event) => onChange({ ...deck, includeUncards: event.target.checked })} />
+            Include Un-/acorn/digital cards
+          </label>
+        </>
+      )}
       {issues.length > 0 && (
         <ul className="issue-list">
           {issues.slice(0, 8).map((issue) => <li key={issue}>{issue}</li>)}
+        </ul>
+      )}
+      {notes.length > 0 && (
+        <ul className="suggest-list">
+          {notes.slice(0, 8).map((note) => <li key={note} className="muted">{note}</li>)}
         </ul>
       )}
       <div className="row-actions" role="tablist" aria-label="Deck sections">
