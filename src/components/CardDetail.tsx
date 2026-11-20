@@ -49,6 +49,18 @@ export function CardDetail({ entry, onClose, onQuantity, onRemove }: CardDetailP
               <dt>Finish</dt>
               <dd>{finishLabel(entry.finish)}</dd>
             </div>
+            {entry.condition && (
+              <div>
+                <dt>Condition</dt>
+                <dd>{entry.condition}</dd>
+              </div>
+            )}
+            {entry.fromTcgplayer && (
+              <div>
+                <dt>Source</dt>
+                <dd>TCGplayer</dd>
+              </div>
+            )}
             <div>
               <dt>Market price</dt>
               <dd>

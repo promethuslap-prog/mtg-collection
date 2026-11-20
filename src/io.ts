@@ -21,6 +21,8 @@ const CSV_COLUMNS = [
   'scryfall_uri',
   'artist',
   'added_at',
+  'condition',
+  'from_tcgplayer',
 ] as const;
 
 export interface SavedFile {
@@ -75,6 +77,8 @@ export function sanitizeEntry(value: unknown): CollectionEntry | null {
     addedAt: typeof entry.addedAt === 'number' && Number.isFinite(entry.addedAt) ? entry.addedAt : Date.now(),
     scryfallUri: safeScryfallUri(typeof entry.scryfallUri === 'string' ? entry.scryfallUri : undefined) ?? '',
     ...(typeof entry.artist === 'string' && entry.artist ? { artist: entry.artist } : {}),
+    ...(typeof entry.condition === 'string' && entry.condition.trim() ? { condition: entry.condition.trim() } : {}),
+    ...(entry.fromTcgplayer === true ? { fromTcgplayer: true } : {}),
   };
 }
 
@@ -155,6 +159,8 @@ export function serializeCsv(entries: CollectionEntry[]): string {
       entry.scryfallUri,
       entry.artist ?? '',
       entry.addedAt,
+      entry.condition ?? '',
+      entry.fromTcgplayer ? 'true' : '',
     ];
     rows.push(values.map((value) => csvCell(value)).join(','));
   }
@@ -253,6 +259,8 @@ export function parseCollectionCsv(text: string): { entries: CollectionEntry[]; 
       addedAt: Number(row.added_at) || Date.now(),
       scryfallUri: row.scryfall_uri || '',
       artist: row.artist || '',
+      condition: row.condition || '',
+      fromTcgplayer: ['true', 'yes', '1'].includes((row.from_tcgplayer || '').toLowerCase()),
     });
     if (entry) entries.push(entry);
     else skipped += 1;

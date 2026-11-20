@@ -49,7 +49,7 @@ export function CollectionBrowser({
     return base;
   }, [entries]);
   const visible = useMemo(() => sortEntries(filterEntries(entries, filters), sort), [entries, filters, sort]);
-  const facetCount = filters.colors.length + filters.types.length + filters.rarities.length + (filters.set ? 1 : 0);
+  const facetCount = filters.colors.length + filters.types.length + filters.rarities.length + (filters.set ? 1 : 0) + (filters.tcgplayer ? 1 : 0);
 
   if (entries.length === 0) {
     return (
@@ -143,6 +143,19 @@ export function CollectionBrowser({
             ))}
           </div>
         </fieldset>
+        <fieldset>
+          <legend>Source</legend>
+          <div className="chip-row">
+            <button
+              type="button"
+              className="chip"
+              aria-pressed={filters.tcgplayer}
+              onClick={() => onFilters({ ...filters, tcgplayer: !filters.tcgplayer })}
+            >
+              From TCGplayer
+            </button>
+          </div>
+        </fieldset>
         <label className="field set-field">
           Set
           <select value={filters.set} onChange={(event) => onFilters({ ...filters, set: event.target.value })}>
@@ -158,7 +171,7 @@ export function CollectionBrowser({
           <button
             type="button"
             className="btn ghost"
-            onClick={() => onFilters({ ...filters, colors: [], types: [], rarities: [], set: '' })}
+            onClick={() => onFilters({ ...filters, colors: [], types: [], rarities: [], set: '', tcgplayer: false })}
           >
             Clear filters
           </button>
@@ -187,7 +200,9 @@ export function CollectionBrowser({
                   <span>{entry.set.toUpperCase()}</span>
                   <span className={rarityClass(entry.rarity)}>{rarityLabel(entry.rarity)}</span>
                   {entry.finish !== 'nonfoil' && <span className="finish-tag">{entry.finish === 'foil' ? 'Foil' : 'Etched'}</span>}
+                  {entry.fromTcgplayer && <span className="tcg-tag">TCGplayer</span>}
                 </span>
+                {entry.condition && <span className="condition">{entry.condition}</span>}
                 <span className="tile-price">{priceLabel(entry)}</span>
               </button>
               <div className="tile-actions">
@@ -217,6 +232,8 @@ export function CollectionBrowser({
                   {entry.setName || entry.set.toUpperCase()} ({entry.set.toUpperCase()}) #{entry.collectorNumber} ·{' '}
                   <span className={rarityClass(entry.rarity)}>{rarityLabel(entry.rarity)}</span>
                   {entry.finish !== 'nonfoil' ? ` · ${entry.finish === 'foil' ? 'Foil' : 'Etched'}` : ''}
+                  {entry.condition ? ` · ${entry.condition}` : ''}
+                  {entry.fromTcgplayer ? ' · TCGplayer' : ''}
                 </p>
               </div>
               <div className="list-side">

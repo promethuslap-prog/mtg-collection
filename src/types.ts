@@ -31,6 +31,8 @@ export interface CollectionEntry {
   addedAt: number;
   scryfallUri: string;
   artist?: string;
+  condition?: string;
+  fromTcgplayer?: boolean;
 }
 
 export interface Filters {
@@ -39,6 +41,7 @@ export interface Filters {
   types: string[];
   rarities: string[];
   set: string;
+  tcgplayer: boolean;
 }
 
 export const EMPTY_FILTERS: Filters = {
@@ -47,4 +50,5 @@ export const EMPTY_FILTERS: Filters = {
   types: [],
   rarities: [],
   set: '',
+  tcgplayer: false,
 };

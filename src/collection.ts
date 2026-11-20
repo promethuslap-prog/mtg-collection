@@ -96,6 +96,7 @@ export function matchesColor(identity: string[], selected: string[]): boolean {
 }
 
 export function matchesFilters(entry: CollectionEntry, filters: Filters): boolean {
+  if (filters.tcgplayer && !entry.fromTcgplayer) return false;
   if (!matchesColor(entry.colorIdentity, filters.colors)) return false;
   if (filters.types.length > 0) {
     const types = cardTypes(entry.typeLine);

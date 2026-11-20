@@ -13,7 +13,7 @@ Card names, images, and prices come from [Scryfall](https://scryfall.com).
 - Browse the collection as a grid or a list
 - Filter by color, type, set, and rarity, and sort by name, price, or date added
 - See total cards, unique cards, estimated value, and a breakdown by color and set
-- Refresh USD market prices from Scryfall
+- Refresh USD market prices from Scryfall, and pick up new TCGplayer orders
 - Export or import JSON and CSV, or paste a decklist such as `4 Lightning Bolt`
 
 ## Local development
@@ -30,6 +30,16 @@ The app uses the `/mtg-collection/` base path, the same path GitHub Pages uses. 
 npm run build
 npm run preview
 ```
+
+## TCGplayer purchases
+
+The site reads `public/purchases.json`. That file is copied into the build and served at:
+
+https://promethuslap-prog.github.io/mtg-collection/purchases.json
+
+Every push to `main`, including a commit that only updates `public/purchases.json`, runs `.github/workflows/pages.yml` and republishes the site. There is no path filter on that workflow.
+
+On each visit, and when you press Refresh, the page fetches the file with a cache-busting query. Each order `id` is imported once on that browser and then remembered. Later edits or removals are left alone. Undo removes the cards from that import and still keeps the order ids marked, so a reload does not add them again.
 
 ## Where your cards are stored
 

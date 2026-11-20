@@ -77,13 +77,16 @@ async function request(url: string, init: RequestInit, gapMs: number): Promise<R
         if (signal?.aborted) throw aborted();
         let response: Response;
         try {
+          const headers: Record<string, string> = {
+            Accept: 'application/json;q=0.9,*/*;q=0.8',
+            // Browsers drop this forbidden header and keep their own User-Agent, which is what Scryfall asks for.
+            // Node's fetch otherwise sends a library default that Scryfall rejects.
+            'User-Agent': 'mtg-collection/1.0',
+            ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+          };
           response = await fetch(url, {
             ...init,
-            headers: {
-              Accept: 'application/json;q=0.9,*/*;q=0.8',
-              ...(init.body ? { 'Content-Type': 'application/json' } : {}),
-              ...init.headers,
-            },
+            headers: { ...headers, ...init.headers },
           });
         } catch (error) {
           if (signal?.aborted || (error instanceof Error && error.name === 'AbortError')) throw error;
@@ -151,6 +154,36 @@ export async function searchPrintings(
     url = body.next_page;
   }
   return { cards, truncated: true };
+}
+
+export interface ScryfallSetInfo {
+  code: string;
+  name: string;
+  set_type?: string;
+}
+
+export async function fetchSets(signal?: AbortSignal): Promise<ScryfallSetInfo[]> {
+  let url = `${API}/sets`;
+  const sets: ScryfallSetInfo[] = [];
+  for (let page = 0; page < 5; page += 1) {
+    const body = await getJson<ListBody<ScryfallSetInfo>>(url, GAP_SEARCH_MS, signal, false);
+    sets.push(...(body.data ?? []));
+    if (!body.has_more || !body.next_page) break;
+    url = body.next_page;
+  }
+  return sets;
+}
+
+export async function searchByQuery(query: string, signal?: AbortSignal, maxPages = 2): Promise<ScryfallCard[]> {
+  let url = `${API}/cards/search?order=released&dir=desc&unique=prints&q=${encodeURIComponent(query)}`;
+  const cards: ScryfallCard[] = [];
+  for (let page = 0; page < maxPages; page += 1) {
+    const body = await getJson<ListBody<ScryfallCard>>(url, GAP_SEARCH_MS, signal, true);
+    cards.push(...(body.data ?? []));
+    if (!body.has_more || !body.next_page) break;
+    url = body.next_page;
+  }
+  return cards;
 }
 
 export async function fetchCollection(

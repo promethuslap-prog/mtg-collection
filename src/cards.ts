@@ -27,6 +27,12 @@ export interface ScryfallCard {
   collector_number: string;
   rarity?: string;
   finishes?: string[];
+  frame?: string;
+  border_color?: string;
+  frame_effects?: string[];
+  promo?: boolean;
+  promo_types?: string[];
+  released_at?: string;
   prices?: {
     usd?: string | null;
     usd_foil?: string | null;
@@ -160,6 +166,8 @@ export function updateEntryFromCard(entry: CollectionEntry, card: ScryfallCard):
     imageBack: fresh.imageBack ?? entry.imageBack,
     addedAt: entry.addedAt,
     quantity: entry.quantity,
+    ...(entry.condition ? { condition: entry.condition } : {}),
+    ...(entry.fromTcgplayer ? { fromTcgplayer: true } : {}),
   };
 }
 

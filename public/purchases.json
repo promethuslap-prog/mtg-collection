@@ -1,0 +1,758 @@
+{
+  "version": 1,
+  "updatedAt": "2026-11-19T21:34:46-08:00",
+  "orders": [
+    {
+      "id": "tcg-0a50ad2a5e26",
+      "date": "2025-12-13",
+      "source": "TCGplayer",
+      "items": [
+        {
+          "qty": 1,
+          "set": "Avatar: The Last Airbender",
+          "name": "The Walls of Ba Sing Se",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - Avatar: The Last Airbender - The Walls of Ba Sing Se - Lightly Played"
+        },
+        {
+          "qty": 1,
+          "set": "Commander: Bloomburrow",
+          "name": "Agate Instigator",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - Commander: Bloomburrow - Agate Instigator - Near Mint"
+        },
+        {
+          "qty": 1,
+          "set": "Commander: Bloomburrow",
+          "name": "Outpost Siege",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - Commander: Bloomburrow - Outpost Siege - Near Mint"
+        },
+        {
+          "qty": 1,
+          "set": "Commander: Bloomburrow",
+          "name": "Warstorm Surge",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - Commander: Bloomburrow - Warstorm Surge - Near Mint"
+        },
+        {
+          "qty": 1,
+          "set": "Edge of Eternities",
+          "name": "Weftstalker Ardent",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - Edge of Eternities - Weftstalker Ardent - Near Mint"
+        },
+        {
+          "qty": 1,
+          "set": "Foundations Jumpstart",
+          "name": "General Kreat, the Boltbringer (Anime)",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - Foundations Jumpstart - General Kreat, the Boltbringer (Anime) - Near Mint"
+        },
+        {
+          "qty": 1,
+          "set": "Outlaws of Thunder Junction",
+          "name": "Terror of the Peaks",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - Outlaws of Thunder Junction - Terror of the Peaks - Lightly Played"
+        },
+        {
+          "qty": 1,
+          "set": "Streets of New Capenna",
+          "name": "Witty Roastmaster",
+          "condition": "Near Mint",
+          "foil": true,
+          "raw": "Magic - Streets of New Capenna - Witty Roastmaster - Near Mint Foil"
+        },
+        {
+          "qty": 1,
+          "set": "Tarkir: Dragonstorm",
+          "name": "Shocking Sharpshooter",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - Tarkir: Dragonstorm - Shocking Sharpshooter - Near Mint"
+        }
+      ]
+    },
+    {
+      "id": "tcg-1303a8edbd86",
+      "date": "2025-12-19",
+      "source": "TCGplayer",
+      "items": [
+        {
+          "qty": 1,
+          "set": "Avacyn Restored",
+          "name": "Battle Hymn",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - Avacyn Restored - Battle Hymn - Lightly Played"
+        },
+        {
+          "qty": 1,
+          "set": "Battlebond",
+          "name": "Mycosynth Lattice",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - Battlebond - Mycosynth Lattice - Near Mint"
+        },
+        {
+          "qty": 1,
+          "set": "Commander 2014",
+          "name": "Dualcaster Mage",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - Commander 2014 - Dualcaster Mage - Lightly Played"
+        },
+        {
+          "qty": 1,
+          "set": "Commander Masters",
+          "name": "Deflecting Swat",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - Commander Masters - Deflecting Swat - Lightly Played"
+        },
+        {
+          "qty": 1,
+          "set": "Commander: Aetherdrift",
+          "name": "Chaos Warp",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - Commander: Aetherdrift - Chaos Warp - Near Mint"
+        },
+        {
+          "qty": 1,
+          "set": "Commander: Bloomburrow",
+          "name": "Maskwood Nexus",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - Commander: Bloomburrow - Maskwood Nexus - Near Mint"
+        },
+        {
+          "qty": 1,
+          "set": "Commander: Dominaria United",
+          "name": "Hedron Archive",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - Commander: Dominaria United - Hedron Archive - Near Mint"
+        },
+        {
+          "qty": 1,
+          "set": "Commander: FINAL FANTASY",
+          "name": "Professional Face-Breaker",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - Commander: FINAL FANTASY - Professional Face-Breaker - Near Mint"
+        },
+        {
+          "qty": 1,
+          "set": "Commander: FINAL FANTASY",
+          "name": "Tome of Legends",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - Commander: FINAL FANTASY - Tome of Legends - Near Mint"
+        },
+        {
+          "qty": 1,
+          "set": "Conflux",
+          "name": "Font of Mythos",
+          "condition": "Heavily Played",
+          "foil": false,
+          "raw": "Magic - Conflux - Font of Mythos - Heavily Played"
+        },
+        {
+          "qty": 1,
+          "set": "Conspiracy",
+          "name": "Mana Geyser",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - Conspiracy - Mana Geyser - Lightly Played"
+        },
+        {
+          "qty": 1,
+          "set": "Core Set 2020",
+          "name": "Goblin Ringleader",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - Core Set 2020 - Goblin Ringleader - Lightly Played"
+        },
+        {
+          "qty": 1,
+          "set": "Core Set 2021",
+          "name": "Conspicuous Snoop",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - Core Set 2021 - Conspicuous Snoop - Near Mint"
+        },
+        {
+          "qty": 1,
+          "set": "Dominaria Remastered",
+          "name": "Gamble (Retro Frame)",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - Dominaria Remastered - Gamble (Retro Frame) - Near Mint"
+        },
+        {
+          "qty": 1,
+          "set": "Fourth Edition",
+          "name": "Howling Mine",
+          "condition": "Heavily Played",
+          "foil": false,
+          "raw": "Magic - Fourth Edition - Howling Mine - Heavily Played"
+        },
+        {
+          "qty": 1,
+          "set": "Ice Age",
+          "name": "Pyroblast",
+          "condition": "Heavily Played",
+          "foil": false,
+          "raw": "Magic - Ice Age - Pyroblast - Heavily Played"
+        },
+        {
+          "qty": 1,
+          "set": "Innistrad: Midnight Hunt",
+          "name": "Moonsilver Key",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - Innistrad: Midnight Hunt - Moonsilver Key - Lightly Played"
+        },
+        {
+          "qty": 1,
+          "set": "Judgment",
+          "name": "Anger",
+          "condition": "Heavily Played",
+          "foil": false,
+          "raw": "Magic - Judgment - Anger - Heavily Played"
+        },
+        {
+          "qty": 1,
+          "set": "Mirrodin",
+          "name": "Mind's Eye",
+          "condition": "Heavily Played",
+          "foil": false,
+          "raw": "Magic - Mirrodin - Mind's Eye - Heavily Played"
+        },
+        {
+          "qty": 1,
+          "set": "Modern Horizons 3",
+          "name": "Worn Powerstone",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - Modern Horizons 3 - Worn Powerstone - Near Mint"
+        },
+        {
+          "qty": 1,
+          "set": "Mystery Booster 2",
+          "name": "Goblin Recruiter (Future Sight)",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - Mystery Booster 2 - Goblin Recruiter (Future Sight) - Near Mint"
+        },
+        {
+          "qty": 1,
+          "set": "Nemesis",
+          "name": "Moggcatcher",
+          "condition": "Heavily Played",
+          "foil": false,
+          "raw": "Magic - Nemesis - Moggcatcher - Heavily Played"
+        },
+        {
+          "qty": 1,
+          "set": "Onslaught",
+          "name": "Brightstone Ritual",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - Onslaught - Brightstone Ritual - Lightly Played"
+        },
+        {
+          "qty": 1,
+          "set": "Onslaught",
+          "name": "Mana Echoes",
+          "condition": "Heavily Played",
+          "foil": false,
+          "raw": "Magic - Onslaught - Mana Echoes - Heavily Played"
+        },
+        {
+          "qty": 1,
+          "set": "Phyrexia: All Will Be One",
+          "name": "Sword of Forge and Frontier",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - Phyrexia: All Will Be One - Sword of Forge and Frontier - Near Mint"
+        },
+        {
+          "qty": 1,
+          "set": "Return to Ravnica",
+          "name": "Vandalblast",
+          "condition": "Heavily Played",
+          "foil": false,
+          "raw": "Magic - Return to Ravnica - Vandalblast - Heavily Played"
+        },
+        {
+          "qty": 1,
+          "set": "Revised Edition",
+          "name": "Basalt Monolith",
+          "condition": "Moderately Played",
+          "foil": false,
+          "raw": "Magic - Revised Edition - Basalt Monolith - Moderately Played"
+        },
+        {
+          "qty": 1,
+          "set": "Scars of Mirrodin",
+          "name": "Platinum Emperion",
+          "condition": "Moderately Played",
+          "foil": false,
+          "raw": "Magic - Scars of Mirrodin - Platinum Emperion - Moderately Played"
+        },
+        {
+          "qty": 1,
+          "set": "Shadowmoor",
+          "name": "Painter's Servant",
+          "condition": "Heavily Played",
+          "foil": false,
+          "raw": "Magic - Shadowmoor - Painter's Servant - Heavily Played"
+        },
+        {
+          "qty": 1,
+          "set": "Tempest",
+          "name": "Boil",
+          "condition": "Heavily Played",
+          "foil": false,
+          "raw": "Magic - Tempest - Boil - Heavily Played"
+        },
+        {
+          "qty": 1,
+          "set": "The List Reprints",
+          "name": "Muxus, Goblin Grandee",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - The List Reprints - Muxus, Goblin Grandee - Near Mint"
+        },
+        {
+          "qty": 1,
+          "set": "The List Reprints",
+          "name": "Wake of Destruction",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - The List Reprints - Wake of Destruction - Lightly Played"
+        },
+        {
+          "qty": 1,
+          "set": "Theros Beyond Death",
+          "name": "Underworld Breach",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - Theros Beyond Death - Underworld Breach - Lightly Played"
+        },
+        {
+          "qty": 1,
+          "set": "Unique and Miscellaneous Promos",
+          "name": "The One Ring (Borderless) (LTR Bundle)",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - Unique and Miscellaneous Promos - The One Ring (Borderless) (LTR Bundle) - Lightly Played"
+        },
+        {
+          "qty": 1,
+          "set": "Universes Beyond: Doctor Who",
+          "name": "Reliquary Tower",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - Universes Beyond: Doctor Who - Reliquary Tower - Near Mint"
+        },
+        {
+          "qty": 1,
+          "set": "Universes Beyond: The Lord of the Rings: Tales of Middle-earth",
+          "name": "Palantir of Orthanc",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - Universes Beyond: The Lord of the Rings: Tales of Middle-earth - Palantir of Orthanc - Near Mint"
+        },
+        {
+          "qty": 1,
+          "set": "Zendikar Rising",
+          "name": "Forsaken Monument",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - Zendikar Rising - Forsaken Monument - Lightly Played"
+        },
+        {
+          "qty": 1,
+          "set": "Zendikar Rising",
+          "name": "Valakut Awakening",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - Zendikar Rising - Valakut Awakening - Lightly Played"
+        }
+      ]
+    },
+    {
+      "id": "tcg-803c14d6769a",
+      "date": "2026-01-19",
+      "source": "TCGplayer",
+      "items": [
+        {
+          "qty": 1,
+          "set": "Duskmourn: House of Horror",
+          "name": "Marvin, Murderous Mimic (Showcase)",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - Duskmourn: House of Horror - Marvin, Murderous Mimic (Showcase) - Near Mint"
+        },
+        {
+          "qty": 1,
+          "set": "Foundations",
+          "name": "Twinflame Tyrant",
+          "condition": "Damaged",
+          "foil": false,
+          "raw": "Magic - Foundations - Twinflame Tyrant - Damaged"
+        },
+        {
+          "qty": 1,
+          "set": "Lorwyn Eclipsed",
+          "name": "Hexing Squelcher",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - Lorwyn Eclipsed - Hexing Squelcher - Near Mint"
+        },
+        {
+          "qty": 1,
+          "set": "Modern Horizons 3",
+          "name": "Ulamog, the Defiler (Borderless)",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - Modern Horizons 3 - Ulamog, the Defiler (Borderless) - Lightly Played"
+        },
+        {
+          "qty": 1,
+          "set": "World Championship Decks",
+          "name": "Grim Monolith - 1999 Kai Budde (ULG)",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - World Championship Decks - Grim Monolith - 1999 Kai Budde (ULG) - Lightly Played"
+        }
+      ]
+    },
+    {
+      "id": "tcg-7e9907f25526",
+      "date": "2026-08-15",
+      "source": "TCGplayer",
+      "items": [
+        {
+          "qty": 1,
+          "set": "Battle for Zendikar",
+          "name": "Sanctum of Ugin",
+          "condition": "Moderately Played",
+          "foil": false,
+          "raw": "Magic - Battle for Zendikar - Sanctum of Ugin - Moderately Played"
+        },
+        {
+          "qty": 1,
+          "set": "Bloomburrow",
+          "name": "Three Tree City",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - Bloomburrow - Three Tree City - Lightly Played"
+        },
+        {
+          "qty": 1,
+          "set": "Commander: Modern Horizons 3",
+          "name": "Urza's Power Plant",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - Commander: Modern Horizons 3 - Urza's Power Plant - Near Mint"
+        },
+        {
+          "qty": 1,
+          "set": "Commander: Secrets of Strixhaven",
+          "name": "Lotus Field",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - Commander: Secrets of Strixhaven - Lotus Field - Lightly Played"
+        },
+        {
+          "qty": 1,
+          "set": "Commander: The Brothers' War",
+          "name": "Urza's Workshop",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - Commander: The Brothers' War - Urza's Workshop - Lightly Played"
+        },
+        {
+          "qty": 1,
+          "set": "Double Masters",
+          "name": "Urza's Mine",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - Double Masters - Urza's Mine - Lightly Played"
+        },
+        {
+          "qty": 1,
+          "set": "Edge of Eternities",
+          "name": "Tannuk, Steadfast Second",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - Edge of Eternities - Tannuk, Steadfast Second - Near Mint"
+        },
+        {
+          "qty": 1,
+          "set": "Edge of Eternities: Stellar Sights",
+          "name": "Terrain Generator (0043) (Borderless)",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - Edge of Eternities: Stellar Sights - Terrain Generator (0043) (Borderless) - Lightly Played"
+        },
+        {
+          "qty": 1,
+          "set": "Fifth Edition",
+          "name": "Urza's Tower",
+          "condition": "Moderately Played",
+          "foil": false,
+          "raw": "Magic - Fifth Edition - Urza's Tower - Moderately Played"
+        },
+        {
+          "qty": 1,
+          "set": "FINAL FANTASY",
+          "name": "PuPu UFO",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - FINAL FANTASY - PuPu UFO - Lightly Played"
+        },
+        {
+          "qty": 1,
+          "set": "Ice Age",
+          "name": "Glacial Chasm",
+          "condition": "Damaged",
+          "foil": false,
+          "raw": "Magic - Ice Age - Glacial Chasm - Damaged"
+        },
+        {
+          "qty": 1,
+          "set": "Modern Masters 2015",
+          "name": "Everflowing Chalice",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - Modern Masters 2015 - Everflowing Chalice - Lightly Played"
+        },
+        {
+          "qty": 1,
+          "set": "Mystery Booster 2",
+          "name": "Thespian's Stage (White Border)",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - Mystery Booster 2 - Thespian's Stage (White Border) - Near Mint"
+        },
+        {
+          "qty": 1,
+          "set": "Outlaws of Thunder Junction",
+          "name": "Arid Archway",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - Outlaws of Thunder Junction - Arid Archway - Lightly Played"
+        },
+        {
+          "qty": 1,
+          "set": "Secret Lair Countdown Kit",
+          "name": "Phyrexian Altar",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - Secret Lair Countdown Kit - Phyrexian Altar - Near Mint"
+        },
+        {
+          "qty": 1,
+          "set": "The Hobbit",
+          "name": "Orcrist, Goblin-cleaver",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - The Hobbit - Orcrist, Goblin-cleaver - Near Mint"
+        },
+        {
+          "qty": 1,
+          "set": "The List Reprints",
+          "name": "Guildless Commons",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - The List Reprints - Guildless Commons - Near Mint"
+        },
+        {
+          "qty": 1,
+          "set": "Time Spiral",
+          "name": "Vesuva",
+          "condition": "Damaged",
+          "foil": false,
+          "raw": "Magic - Time Spiral - Vesuva - Damaged"
+        },
+        {
+          "qty": 1,
+          "set": "Visions",
+          "name": "Dormant Volcano",
+          "condition": "Damaged",
+          "foil": false,
+          "raw": "Magic - Visions - Dormant Volcano - Damaged"
+        },
+        {
+          "qty": 1,
+          "set": "Weatherlight",
+          "name": "Lotus Vale",
+          "condition": "Damaged",
+          "foil": false,
+          "raw": "Magic - Weatherlight - Lotus Vale - Damaged"
+        },
+        {
+          "qty": 1,
+          "set": "Weatherlight",
+          "name": "Scorched Ruins",
+          "condition": "Heavily Played",
+          "foil": false,
+          "raw": "Magic - Weatherlight - Scorched Ruins - Heavily Played"
+        },
+        {
+          "qty": 1,
+          "set": "Wilds of Eldraine: Enchanting Tales",
+          "name": "Aggravated Assault",
+          "condition": "Moderately Played",
+          "foil": false,
+          "raw": "Magic - Wilds of Eldraine: Enchanting Tales - Aggravated Assault - Moderately Played"
+        },
+        {
+          "qty": 1,
+          "set": "World Championship Decks",
+          "name": "Ancient Tomb - 1999 Kai Budde (TMP)",
+          "condition": "Damaged",
+          "foil": false,
+          "raw": "Magic - World Championship Decks - Ancient Tomb - 1999 Kai Budde (TMP) - Damaged"
+        },
+        {
+          "qty": 1,
+          "set": "World Championship Decks",
+          "name": "Grim Monolith - 2000 Jon Finkel (ULG)",
+          "condition": "Heavily Played",
+          "foil": false,
+          "raw": "Magic - World Championship Decks - Grim Monolith - 2000 Jon Finkel (ULG) - Heavily Played"
+        },
+        {
+          "qty": 1,
+          "set": "Worldwake",
+          "name": "Amulet of Vigor",
+          "condition": "Heavily Played",
+          "foil": false,
+          "raw": "Magic - Worldwake - Amulet of Vigor - Heavily Played"
+        },
+        {
+          "qty": 1,
+          "set": "Zendikar Rising",
+          "name": "Shatterskull Smashing",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - Zendikar Rising - Shatterskull Smashing - Near Mint"
+        }
+      ]
+    },
+    {
+      "id": "tcg-9e4451d476da",
+      "date": "2026-08-25",
+      "source": "TCGplayer",
+      "items": [
+        {
+          "qty": 1,
+          "set": "Secret Lair Drop Series",
+          "name": "Crucible of Worlds (7162)",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - Secret Lair Drop Series - Crucible of Worlds (7162) - Near Mint"
+        }
+      ]
+    },
+    {
+      "id": "tcg-dcd8829557ab",
+      "date": "2026-08-25",
+      "source": "TCGplayer",
+      "items": [
+        {
+          "qty": 1,
+          "set": "Battle for Zendikar",
+          "name": "Scour from Existence",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - Battle for Zendikar - Scour from Existence - Lightly Played"
+        },
+        {
+          "qty": 1,
+          "set": "Core Set 2020",
+          "name": "Meteor Golem",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - Core Set 2020 - Meteor Golem - Lightly Played"
+        },
+        {
+          "qty": 1,
+          "set": "MagicFest Cards",
+          "name": "Ugin, the Spirit Dragon (Retro Frame)",
+          "condition": "Lightly Played",
+          "foil": true,
+          "raw": "Magic - MagicFest Cards - Ugin, the Spirit Dragon (Retro Frame) - Lightly Played Foil"
+        },
+        {
+          "qty": 1,
+          "set": "The List Reprints",
+          "name": "Abrade (2XM)",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - The List Reprints - Abrade (2XM) - Lightly Played"
+        },
+        {
+          "qty": 1,
+          "set": "The List Reprints",
+          "name": "Shattering Spree",
+          "condition": "Near Mint",
+          "foil": false,
+          "raw": "Magic - The List Reprints - Shattering Spree - Near Mint"
+        }
+      ]
+    },
+    {
+      "id": "tcg-51433a861be8",
+      "date": "2026-08-29",
+      "source": "TCGplayer",
+      "items": [
+        {
+          "qty": 1,
+          "set": "Commander: Murders at Karlov Manor",
+          "name": "Jeska's Will",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - Commander: Murders at Karlov Manor - Jeska's Will - Lightly Played"
+        }
+      ]
+    },
+    {
+      "id": "tcg-fb93a5297be6",
+      "date": "2026-09-07",
+      "source": "TCGplayer",
+      "items": [
+        {
+          "qty": 1,
+          "set": "Dominaria",
+          "name": "Goblin Warchief",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - Dominaria - Goblin Warchief - Lightly Played"
+        },
+        {
+          "qty": 1,
+          "set": "Magic 2011 (M11)",
+          "name": "Goblin Chieftain",
+          "condition": "Lightly Played",
+          "foil": false,
+          "raw": "Magic - Magic 2011 (M11) - Goblin Chieftain - Lightly Played"
+        }
+      ]
+    }
+  ]
+}

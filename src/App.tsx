@@ -7,6 +7,8 @@ import { Stats } from './components/Stats';
 import { mergeIntoCollection } from './collection';
 import { fetchCollection } from './scryfall';
 import { updateEntryFromCard } from './cards';
+import { importNewOrders } from './importPurchases';
+import { applyQuantityUndo, purchaseMessage, type QuantityDelta } from './purchases';
 import { loadCollection, saveCollection } from './storage';
 import { countNoun, finishLabel } from './format';
 import { EMPTY_FILTERS, type CollectionEntry, type Filters, type SortKey, type ViewMode } from './types';
@@ -16,28 +18,45 @@ interface Toast {
   action?: { label: string; run: () => void };
 }
 
+interface PurchaseNotice {
+  message: string;
+  skipped: string[];
+  deltas: QuantityDelta[];
+}
+
 export function App() {
   const saved = useRef(loadCollection());
   const warned = useRef(false);
   const toastTimer = useRef<number | null>(null);
+  const purchaseLock = useRef(false);
   const [entries, setEntries] = useState<CollectionEntry[]>(saved.current.entries);
   const [view, setView] = useState<ViewMode>(saved.current.view);
   const [sort, setSort] = useState<SortKey>(saved.current.sort);
   const [pricesUpdatedAt, setPricesUpdatedAt] = useState<number | null>(saved.current.pricesUpdatedAt);
+  const [importedOrderIds, setImportedOrderIds] = useState<string[]>(saved.current.importedOrderIds);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [toast, setToast] = useState<Toast | null>(null);
+  const [purchaseNotice, setPurchaseNotice] = useState<PurchaseNotice | null>(null);
   const [backupOpen, setBackupOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshLabel, setRefreshLabel] = useState<string | null>(null);
+  const entriesRef = useRef(entries);
+  const importedRef = useRef(importedOrderIds);
+  entriesRef.current = entries;
+  importedRef.current = importedOrderIds;
 
   useEffect(() => {
-    const error = saveCollection({ version: 1, entries, pricesUpdatedAt, view, sort });
+    const error = saveCollection({ version: 1, entries, pricesUpdatedAt, view, sort, importedOrderIds });
     if (error && !warned.current) {
       warned.current = true;
       showToast('Could not save on this device. Export a backup so you do not lose cards.');
     }
-  }, [entries, pricesUpdatedAt, view, sort]);
+  }, [entries, pricesUpdatedAt, view, sort, importedOrderIds]);
+
+  useEffect(() => {
+    void syncPurchases(false);
+  }, []);
 
   useEffect(() => () => {
     if (toastTimer.current) window.clearTimeout(toastTimer.current);
@@ -80,26 +99,61 @@ export function App() {
     });
   }
 
-  async function refreshPrices() {
-    if (refreshing || entries.length === 0) return;
-    setRefreshing(true);
-    setRefreshLabel('Updating prices…');
+  async function syncPurchases(announceErrors: boolean) {
+    if (purchaseLock.current) return;
+    purchaseLock.current = true;
     try {
-      const identifiers = [...new Set(entries.map((entry) => entry.scryfallId))].map((id) => ({ id }));
-      const { cards, notFound } = await fetchCollection(identifiers, (done, total) => {
-        setRefreshLabel(`Updating ${done} / ${total}`);
+      const result = await importNewOrders(importedRef.current);
+      if (!result) return;
+      const nextIds = [...new Set([...importedRef.current, ...result.processedOrderIds])];
+      importedRef.current = nextIds;
+      setImportedOrderIds(nextIds);
+      if (result.entries.length === 0 && result.skipped.length === 0) return;
+      const merged = mergeIntoCollection(entriesRef.current, result.entries);
+      entriesRef.current = merged;
+      setEntries(merged);
+      setPurchaseNotice({
+        message: purchaseMessage(result.addedCards, result.matchedOrderIds.length || result.processedOrderIds.length),
+        skipped: result.skipped,
+        deltas: result.entries.map((entry) => ({ id: entry.id, added: entry.quantity })),
       });
-      if (cards.length === 0) {
-        showToast('Scryfall did not return any of these cards.');
-        return;
-      }
-      const byId = new Map(cards.map((card) => [card.id, card]));
-      setEntries((current) => current.map((entry) => {
-        const card = byId.get(entry.scryfallId);
-        return card ? updateEntryFromCard(entry, card) : entry;
-      }));
-      setPricesUpdatedAt(Date.now());
-      showToast(notFound.length > 0 ? `Prices updated. ${notFound.length} cards were not found.` : 'Prices updated from Scryfall.');
+    } catch (error) {
+      if (announceErrors) showToast(error instanceof Error ? error.message : 'Could not import TCGplayer orders.');
+      else console.warn(error);
+    } finally {
+      purchaseLock.current = false;
+    }
+  }
+
+  async function refreshPrices(source: CollectionEntry[]) {
+    if (source.length === 0) return;
+    setRefreshLabel('Updating prices…');
+    const identifiers = [...new Set(source.map((entry) => entry.scryfallId))].map((id) => ({ id }));
+    const { cards, notFound } = await fetchCollection(identifiers, (done, total) => {
+      setRefreshLabel(`Updating ${done} / ${total}`);
+    });
+    if (cards.length === 0) {
+      showToast('Scryfall did not return any of these cards.');
+      return;
+    }
+    const byId = new Map(cards.map((card) => [card.id, card]));
+    const updated = entriesRef.current.map((entry) => {
+      const card = byId.get(entry.scryfallId);
+      return card ? updateEntryFromCard(entry, card) : entry;
+    });
+    entriesRef.current = updated;
+    setEntries(updated);
+    setPricesUpdatedAt(Date.now());
+    showToast(notFound.length > 0 ? `Prices updated. ${notFound.length} cards were not found.` : 'Prices updated from Scryfall.');
+  }
+
+  async function refreshAll() {
+    if (refreshing) return;
+    setRefreshing(true);
+    setRefreshLabel('Checking orders…');
+    try {
+      await syncPurchases(true);
+      await refreshPrices(entriesRef.current);
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Could not refresh prices.');
     } finally {
@@ -122,8 +176,8 @@ export function App() {
           <p className="tagline">Your collection, saved in this browser.</p>
         </div>
         <div className="header-actions">
-          <button type="button" className="btn" onClick={() => void refreshPrices()} disabled={refreshing || entries.length === 0}>
-            {refreshLabel ?? 'Refresh prices'}
+          <button type="button" className="btn" onClick={() => void refreshAll()} disabled={refreshing}>
+            {refreshLabel ?? 'Refresh'}
           </button>
           <button type="button" className="btn primary" onClick={() => setBackupOpen(true)}>
             Backup
@@ -133,6 +187,40 @@ export function App() {
 
       <main>
         <AddCard entries={entries} onAdd={addEntry} />
+        {purchaseNotice && (
+          <section className="purchase-banner" aria-label="TCGplayer import">
+            <p>{purchaseNotice.message}</p>
+            {purchaseNotice.skipped.length > 0 && (
+              <>
+                <p className="hint">Skipped {purchaseNotice.skipped.length === 1 ? '1 item' : `${purchaseNotice.skipped.length} items`} that didn’t match a card.</p>
+                <ul>
+                  {purchaseNotice.skipped.slice(0, 6).map((item) => <li key={item}>{item}</li>)}
+                  {purchaseNotice.skipped.length > 6 && <li>And {purchaseNotice.skipped.length - 6} more.</li>}
+                </ul>
+              </>
+            )}
+            <div className="row-actions">
+              {purchaseNotice.deltas.length > 0 && (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    const undone = applyQuantityUndo(entriesRef.current, purchaseNotice.deltas);
+                    entriesRef.current = undone;
+                    setEntries(undone);
+                    setPurchaseNotice(null);
+                    showToast('Undid the TCGplayer import. Those orders stay marked so they are not added again.');
+                  }}
+                >
+                  Undo
+                </button>
+              )}
+              <button type="button" className="btn ghost" onClick={() => setPurchaseNotice(null)}>
+                Dismiss
+              </button>
+            </div>
+          </section>
+        )}
         <Stats
           entries={entries}
           pricesUpdatedAt={pricesUpdatedAt}

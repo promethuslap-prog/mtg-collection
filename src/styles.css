@@ -438,13 +438,27 @@ fieldset {
   background: transparent;
 }
 
-.finish-tag {
+.finish-tag, .tcg-tag {
   border: 1px solid var(--gold);
   color: var(--gold);
   border-radius: 999px;
   padding: 1px 8px;
   font-size: 0.78rem;
 }
+
+.condition { color: var(--muted); font-size: 0.88rem; }
+
+.purchase-banner {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(224, 180, 90, 0.45);
+  background: rgba(224, 180, 90, 0.12);
+}
+
+.purchase-banner p { margin: 0; }
+
+.purchase-banner ul { margin: 8px 0 0; padding-left: 18px; }
 
 .pips { display: inline-flex; gap: 4px; }
 

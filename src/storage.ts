@@ -10,6 +10,7 @@ export interface SavedData {
   pricesUpdatedAt: number | null;
   view: ViewMode;
   sort: SortKey;
+  importedOrderIds: string[];
 }
 
 export const EMPTY_SAVE: SavedData = {
@@ -18,7 +19,14 @@ export const EMPTY_SAVE: SavedData = {
   pricesUpdatedAt: null,
   view: 'grid',
   sort: 'added-desc',
+  importedOrderIds: [],
 };
+
+function orderIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const ids = value.filter((id): id is string => typeof id === 'string' && id.trim() !== '').map((id) => id.trim());
+  return [...new Set(ids)];
+}
 
 function browserStorage(): Storage | null {
   try {
@@ -43,6 +51,7 @@ export function loadCollection(): SavedData {
       pricesUpdatedAt: typeof data.pricesUpdatedAt === 'number' ? data.pricesUpdatedAt : null,
       view: data.view === 'list' ? 'list' : 'grid',
       sort: isSortKey(data.sort) ? data.sort : 'added-desc',
+      importedOrderIds: orderIds(data.importedOrderIds),
     };
   } catch {
     return EMPTY_SAVE;
