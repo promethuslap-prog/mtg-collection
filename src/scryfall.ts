@@ -90,7 +90,9 @@ async function request(url: string, init: RequestInit, gapMs: number): Promise<R
           });
         } catch (error) {
           if (signal?.aborted || (error instanceof Error && error.name === 'AbortError')) throw error;
-          throw new ScryfallError('Could not reach Scryfall. Check your connection and try again.', 0);
+          await sleep(1200 * (attempt + 1), signal);
+          last = new ScryfallError('Could not reach Scryfall. Check your connection and try again.', 0);
+          continue;
         }
         if (response.status !== 429) return response;
         const retryAfter = Number(response.headers.get('Retry-After'));
@@ -172,6 +174,16 @@ export async function fetchSets(signal?: AbortSignal): Promise<ScryfallSetInfo[]
     url = body.next_page;
   }
   return sets;
+}
+
+export async function searchOrdered(
+  query: string,
+  order = 'edhrec',
+  signal?: AbortSignal,
+): Promise<ScryfallCard[]> {
+  const url = `${API}/cards/search?order=${encodeURIComponent(order)}&unique=cards&q=${encodeURIComponent(query)}`;
+  const body = await getJson<ListBody<ScryfallCard>>(url, GAP_SEARCH_MS, signal, true);
+  return body.data ?? [];
 }
 
 export async function searchByQuery(query: string, signal?: AbortSignal, maxPages = 2): Promise<ScryfallCard[]> {

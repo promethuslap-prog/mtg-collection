@@ -2,6 +2,7 @@ import { availableFinishes, cardToEntry, type CardIdentifier, type ScryfallCard 
 import { oracleNames, tagLayer, withoutMoxfieldNames } from './layers';
 import { parseMoxfieldFile, type MoxfieldCard, type MoxfieldFile } from './moxfield';
 import { loadPurchaseFile, resolvePurchaseOrders } from './importPurchases';
+import { rememberPrinting } from './deckData';
 import { fetchCollection } from './scryfall';
 import { normalizeName } from './text';
 import type { CollectionEntry, Finish } from './types';
@@ -166,6 +167,7 @@ async function lookup(identifiers: CardIdentifier[], signal?: AbortSignal): Prom
   const { cards } = await fetchCollection(unique, undefined, signal);
   const map = new Map<string, ScryfallCard>();
   for (const card of cards) {
+    rememberPrinting(card);
     map.set(numberKey(card.set, card.collector_number), card);
     map.set(`${normalizeName(card.name)}|${card.set.toLowerCase()}`, card);
     map.set(normalizeName(card.name), card);

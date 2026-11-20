@@ -37,7 +37,7 @@ Moxfield is the main list. `public/moxfield.json` is served at:
 
 https://promethuslap-prog.github.io/mtg-collection/moxfield.json
 
-`public/purchases.json` is served at:
+`public/decks.json` is the deck list, served at https://promethuslap-prog.github.io/mtg-collection/decks.json. `public/purchases.json` is served at:
 
 https://promethuslap-prog.github.io/mtg-collection/purchases.json
 

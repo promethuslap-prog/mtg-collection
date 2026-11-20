@@ -20,6 +20,13 @@ export interface ScryfallCard {
     artist?: string;
     type_line?: string;
   }>;
+  mana_cost?: string;
+  cmc?: number;
+  oracle_text?: string;
+  keywords?: string[];
+  legalities?: Record<string, string>;
+  edhrec_rank?: number | null;
+  produced_mana?: string[];
   type_line?: string;
   color_identity?: string[];
   set: string;

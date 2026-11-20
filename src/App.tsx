@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AddCard } from './components/AddCard';
+import { DecksSection } from './components/Decks';
 import { BackupDialog } from './components/BackupDialog';
 import { CardDetail } from './components/CardDetail';
 import { CollectionBrowser } from './components/CollectionBrowser';
@@ -39,6 +40,7 @@ export function App() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [backupOpen, setBackupOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [section, setSection] = useState<'collection' | 'decks'>('collection');
   const [refreshing, setRefreshing] = useState(false);
   const [refreshLabel, setRefreshLabel] = useState<string | null>(null);
   const entries = [...manualEntries, ...moxfieldEntries, ...tcgplayerEntries];
@@ -248,6 +250,10 @@ export function App() {
           )}
         </div>
         <div className="header-actions">
+          <nav className="section-nav" aria-label="Sections">
+            <button type="button" className="btn" aria-pressed={section === 'collection'} onClick={() => setSection('collection')}>Collection</button>
+            <button type="button" className="btn" aria-pressed={section === 'decks'} onClick={() => setSection('decks')}>Decks</button>
+          </nav>
           <button type="button" className="btn" onClick={() => void refreshAll()} disabled={refreshing}>
             {refreshLabel ?? 'Refresh'}
           </button>
@@ -258,6 +264,7 @@ export function App() {
       </header>
 
       <main>
+        {section === 'decks' ? <DecksSection entries={entries} /> : <>
         <AddCard entries={entries} onAdd={addEntry} />
         <Stats
           entries={entries}
@@ -277,6 +284,7 @@ export function App() {
           onRemove={removeEntry}
           onOpen={setDetailId}
         />
+        </>}
       </main>
 
       <footer className="site-footer">

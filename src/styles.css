@@ -119,10 +119,72 @@ main,
   font-size: 0.95rem;
 }
 
-.header-actions, .row-actions, .view-toggle {
+.header-actions, .row-actions, .view-toggle, .section-nav {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.deck-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.deck-card {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 12px;
+  text-align: left;
+  background: rgba(24, 35, 30, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 10px;
+  color: inherit;
+  min-height: 132px;
+}
+
+.deck-art img, .deck-art .fallback, .deck-hero-art img {
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  display: block;
+}
+
+.deck-copy { display: grid; align-content: start; gap: 4px; }
+.deck-copy strong { font-family: var(--display); font-size: 1.25rem; }
+
+.health-ok { color: #b7e4b0; }
+.health-low { color: #f0b4a4; }
+
+.deck-hero { display: grid; grid-template-columns: minmax(140px, 280px) 1fr; gap: 16px; margin: 16px 0; }
+.deck-hero-art { display: flex; gap: 8px; }
+.deck-hero h2 { font-family: var(--display); font-size: clamp(1.8rem, 4vw, 3rem); margin: 0; }
+
+.deck-stats, .role-list { display: grid; gap: 12px; }
+.deck-stats { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin: 16px 0; }
+.curve { display: flex; align-items: end; gap: 8px; min-height: 120px; }
+.curve-col { display: grid; justify-items: center; gap: 2px; flex: 1; }
+.curve-col span { display: block; width: 100%; background: var(--gold); border-radius: 6px 6px 0 0; }
+.curve-col em, .curve-col small { font-style: normal; color: var(--muted); font-size: 0.8rem; }
+.type-bars, .issue-list, .suggest-list { list-style: none; padding: 0; margin: 0; }
+.type-bars li, .role-row, .suggest-list li { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.role-row { display: grid; grid-template-columns: 90px 54px 36px 1fr; align-items: center; }
+.level-low { color: #f0b4a4; }
+.level-ok { color: #b7e4b0; }
+.level-high { color: var(--gold); }
+.suggest-list li { align-items: center; justify-content: flex-start; }
+.suggest-list img { width: 46px; border-radius: 6px; }
+.owned-tag { border: 1px solid #8fce7a; color: #b7e4b0; border-radius: 999px; padding: 0 8px; font-size: 0.75rem; }
+.paste-deck, .deck-page { margin-top: 22px; }
+.paste-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+.budget { max-width: 120px; }
+.issue-list li { color: #f0b4a4; padding: 4px 0; }
+
+@media (max-width: 700px) {
+  .deck-hero, .role-row { grid-template-columns: 1fr; }
+  .deck-card { grid-template-columns: 72px 1fr; }
 }
 
 .btn, .chip, .file-btn {
