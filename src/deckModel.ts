@@ -6,14 +6,41 @@ export interface DeckCardLine {
   foil: '' | 'foil' | 'etched' | boolean;
 }
 
+export const DECK_FORMATS = [
+  { id: 'commander', label: 'Commander', size: 100, exact: true, singleton: true, commander: true, legality: 'commander', roles: 'commander' },
+  { id: 'standard', label: 'Standard', size: 60, exact: false, singleton: false, commander: false, legality: 'standard', roles: 'sixty' },
+  { id: 'modern', label: 'Modern', size: 60, exact: false, singleton: false, commander: false, legality: 'modern', roles: 'sixty' },
+  { id: 'pioneer', label: 'Pioneer', size: 60, exact: false, singleton: false, commander: false, legality: 'pioneer', roles: 'sixty' },
+  { id: 'legacy', label: 'Legacy', size: 60, exact: false, singleton: false, commander: false, legality: 'legacy', roles: 'sixty' },
+  { id: 'vintage', label: 'Vintage', size: 60, exact: false, singleton: false, commander: false, legality: 'vintage', roles: 'sixty' },
+  { id: 'pauper', label: 'Pauper', size: 60, exact: false, singleton: false, commander: false, legality: 'pauper', roles: 'sixty' },
+  { id: 'brawl', label: 'Brawl', size: 60, exact: true, singleton: true, commander: true, legality: 'brawl', roles: 'sixty' },
+  { id: 'casual', label: 'Casual 60', size: 60, exact: false, singleton: false, commander: false, legality: '', roles: 'sixty' },
+] as const;
+
+export type DeckFormat = (typeof DECK_FORMATS)[number]['id'];
+export type DeckOrigin = 'moxfield' | 'local';
+export type DeckSectionName = 'commander' | 'mainboard' | 'sideboard' | 'maybeboard';
+
+export function formatSpec(format: string) {
+  return DECK_FORMATS.find((item) => item.id === format) ?? DECK_FORMATS[0];
+}
+
+export function isDeckFormat(value: unknown): value is DeckFormat {
+  return typeof value === 'string' && DECK_FORMATS.some((item) => item.id === value);
+}
+
 export interface DeckRecord {
   id: string;
   name: string;
-  format: 'commander' | 'standard';
+  format: DeckFormat;
   commanders: string[];
   url: string;
   mainboard: DeckCardLine[];
   sideboard: DeckCardLine[];
+  maybeboard?: DeckCardLine[];
+  commanderBoard?: DeckCardLine[];
+  origin?: DeckOrigin;
   pasted?: boolean;
 }
 
@@ -55,6 +82,9 @@ function parseDeck(value: unknown): DeckRecord | null {
     url: typeof deck.url === 'string' ? deck.url : '',
     mainboard: parseLines(deck.mainboard),
     sideboard: parseLines(deck.sideboard),
+    maybeboard: [],
+    commanderBoard: [],
+    origin: 'moxfield',
   };
 }
 
@@ -80,10 +110,25 @@ function parseLines(value: unknown): DeckCardLine[] {
   return lines;
 }
 
+export function linesOf(deck: DeckRecord, section: DeckSectionName): DeckCardLine[] {
+  if (section === 'commander') return deck.commanderBoard ?? [];
+  if (section === 'sideboard') return deck.sideboard ?? [];
+  if (section === 'maybeboard') return deck.maybeboard ?? [];
+  return deck.mainboard;
+}
+
+export function playingLines(deck: DeckRecord): DeckCardLine[] {
+  return [...(deck.commanderBoard ?? []), ...deck.mainboard];
+}
+
 export function deckSize(deck: DeckRecord): number {
-  return deck.mainboard.reduce((sum, line) => sum + line.qty, 0);
+  return playingLines(deck).reduce((sum, line) => sum + line.qty, 0);
 }
 
 export function formatTarget(format: DeckRecord['format']): number {
-  return format === 'commander' ? 100 : 60;
+  return formatSpec(format).size;
+}
+
+export function isLocalDeck(deck: DeckRecord): boolean {
+  return deck.origin === 'local' || deck.pasted === true;
 }

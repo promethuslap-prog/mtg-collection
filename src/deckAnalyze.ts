@@ -1,6 +1,5 @@
 import { normalizeName } from './text';
-import type { DeckRecord } from './deckModel';
-import { formatTarget } from './deckModel';
+import { formatSpec, formatTarget, type DeckRecord } from './deckModel';
 
 export type RoleId = 'land' | 'ramp' | 'draw' | 'removal' | 'wipe';
 export type Level = 'low' | 'ok' | 'high';
@@ -103,7 +102,7 @@ export function combinedIdentity(identities: string[][]): string[] {
 }
 
 export function landRecommendation(format: DeckRecord['format'], averageMv: number, ramp: number): number {
-  if (format === 'standard') {
+  if (formatSpec(format).roles === 'sixty') {
     return clamp(Math.round(22 + (averageMv - 2.2) * 3), 20, 28);
   }
   let recommend = 36 + Math.round((averageMv - 3) * 2);
@@ -149,31 +148,14 @@ export function analyzeDeck(input: {
     }
   }
 
-  const issues: string[] = [];
-  const hasCommander = deck.commanders.length > 0;
-  for (const card of cards) {
-    if (card.legality === 'banned') issues.push(`${card.name} is banned in ${deck.format}.`);
-    else if (card.legality === 'not_legal') issues.push(`${card.name} is not legal in ${deck.format}.`);
-    if (deck.format === 'commander' && hasCommander && card.colorIdentity.some((color) => !identity.includes(color))) {
-      issues.push(`${card.name} is outside the commander’s color identity.`);
-    }
-    const basic = /basic/i.test(card.typeLine);
-    if (deck.format === 'commander' && !basic && card.qty > 1 && !commanderNames.has(normalizeName(card.name))) {
-      issues.push(`${card.name} appears ${card.qty} times in a singleton format.`);
-    }
-  }
-  if (deck.format === 'commander' && cardCount !== target) {
-    issues.push(`${cardCount} cards. Commander decks are ${target}, including the commander.`);
-  }
-  if (deck.format === 'standard' && cardCount < target) {
-    issues.push(`${cardCount} cards. Standard decks need at least ${target}.`);
-  }
+  const issues = listDeckIssues(deck, cards, identity);
 
   const ramp = countRole(cards, 'ramp');
   const landRecommend = landRecommendation(deck.format, averageMv, ramp);
   const bars = roleBars(deck.format, cards, landRecommend);
+  const spec = formatSpec(deck.format);
   let health = 100;
-  health -= Math.min(30, Math.abs(cardCount - (deck.format === 'standard' ? Math.max(cardCount, target) : target)));
+  health -= Math.min(30, Math.abs(cardCount - (spec.exact ? target : Math.max(cardCount, target))));
   health -= issues.filter((issue) => /banned|not legal|outside/.test(issue)).length * 8;
   health -= bars.filter((bar) => bar.level === 'low').length * 6;
   health = clamp(health, 0, 100);
@@ -185,7 +167,7 @@ export function analyzeDeck(input: {
     .filter((card) => card.priceUsd != null && card.priceUsd <= budget)
     .filter((card) => !deckNames.has(normalizeName(card.name)))
     .filter((card) => !owned.some((item) => normalizeName(item.name) === normalizeName(card.name)))
-    .filter((card) => !hasCommander || card.colorIdentity.every((color) => identity.includes(color)))
+    .filter((card) => deck.commanders.length === 0 || !formatSpec(deck.format).commander || card.colorIdentity.every((color) => identity.includes(color)))
     .slice(0, 8)
     .map((card) => ({
       name: card.name,
@@ -242,12 +224,44 @@ export function analyzeDeck(input: {
   };
 }
 
+export function listDeckIssues(deck: DeckRecord, cards: KnownCard[], identity: string[]): string[] {
+  const spec = formatSpec(deck.format);
+  const issues: string[] = [];
+  const commanderNames = new Set(deck.commanders.map((name) => normalizeName(name)));
+  const hasCommander = deck.commanders.length > 0;
+  for (const card of cards) {
+    if (spec.legality && card.legality === 'banned') issues.push(`${card.name} is banned in ${spec.label}.`);
+    else if (spec.legality && card.legality === 'not_legal') issues.push(`${card.name} is not legal in ${spec.label}.`);
+    if (spec.commander && hasCommander && card.colorIdentity.some((color) => !identity.includes(color))) {
+      issues.push(`${card.name} is outside the commander’s color identity.`);
+    }
+    const basic = /basic/i.test(card.typeLine);
+    if (spec.singleton && !basic && card.qty > 1 && !commanderNames.has(normalizeName(card.name))) {
+      issues.push(`${card.name} appears ${card.qty} times in a singleton format.`);
+    }
+    if (!spec.singleton && spec.legality && !basic && card.qty > 4) {
+      issues.push(`${card.name} has ${card.qty} copies. ${spec.label} allows 4.`);
+    }
+  }
+  const cardCount = cards.reduce((sum, card) => sum + card.qty, 0);
+  const target = formatTarget(deck.format);
+  const label = spec.label;
+  const countsCommander = spec.commander;
+  if (spec.exact && cardCount !== target) {
+    issues.push(`${cardCount} cards. ${label} decks are ${target}${countsCommander ? ', including the commander' : ''}.`);
+  }
+  if (!spec.exact && cardCount < target) {
+    issues.push(`${cardCount} cards. ${label} decks need at least ${target}.`);
+  }
+  return issues;
+}
+
 function countRole(cards: KnownCard[], role: RoleId): number {
   return cards.filter((card) => card.roles.includes(role)).reduce((sum, card) => sum + card.qty, 0);
 }
 
 function roleBars(format: DeckRecord['format'], cards: KnownCard[], landRecommend: number): RoleBar[] {
-  const specs = format === 'commander'
+  const specs = formatSpec(format).roles === 'commander'
     ? [
         { id: 'land' as const, label: 'Lands', min: landRecommend - 1, max: landRecommend + 1, detail: `About ${landRecommend}, from the curve` },
         { id: 'ramp' as const, label: 'Ramp', min: 10, max: 16, detail: 'Aim for 10 or more' },
@@ -285,10 +299,11 @@ function rankOwned(
     const name = normalizeName(card.name);
     if (commanders.has(name)) return null;
     const have = inDeck.get(name) ?? 0;
-    if (deck.format === 'commander' && have > 0) return null;
-    if (deck.format === 'standard' && have >= 4) return null;
-    if (card.legality === 'banned' || card.legality === 'not_legal') return null;
-    if (deck.commanders.length > 0 && card.colorIdentity.some((color) => !identity.includes(color))) return null;
+    const spec = formatSpec(deck.format);
+    if (spec.singleton && have > 0) return null;
+    if (!spec.singleton && have >= 4) return null;
+    if (spec.legality && (card.legality === 'banned' || card.legality === 'not_legal')) return null;
+    if (spec.commander && deck.commanders.length > 0 && card.colorIdentity.some((color) => !identity.includes(color))) return null;
     let score = 1;
     const role = card.roles.find((item) => lowRoles.has(item)) ?? primaryRole(card.roles);
     if (role !== 'other' && lowRoles.has(role as RoleId)) score += 50;
@@ -317,7 +332,7 @@ function rankCuts(cards: KnownCard[], deck: DeckRecord, commanders: Set<string>,
     if (commanders.has(normalizeName(card.name))) continue;
     const basic = /basic/i.test(card.typeLine);
     const roles = card.roles.filter((role) => role !== 'land');
-    if (deck.format === 'commander' && !basic && card.qty > 1) {
+    if (formatSpec(deck.format).singleton && !basic && card.qty > 1) {
       cuts.push({ card, score: 80, reason: `Cut extras. Singleton decks only need one ${card.name}.` });
     }
     if (!card.roles.includes('land') && roles.length === 0 && card.cmc >= averageMv + 1.2) {

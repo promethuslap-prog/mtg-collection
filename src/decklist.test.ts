@@ -36,6 +36,8 @@ Lands
     expect(byName['Giant Growth'].quantity).toBe(4);
     expect(byName['Command Tower'].set).toBe('c21');
     expect(parsed.lines.some((line) => line.name === 'Sideboard' || line.name === 'Lands')).toBe(false);
+    expect(parsed.lines.find((line) => line.name === 'Duress')?.section).toBe('sideboard');
+    expect(parsed.lines.find((line) => line.name === 'Lightning Bolt')?.section).toBe('mainboard');
   });
 
   it('keeps punctuation in card names', () => {

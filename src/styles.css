@@ -123,6 +123,7 @@ main,
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  align-items: center;
 }
 
 .deck-grid {
@@ -134,8 +135,7 @@ main,
 
 .deck-card {
   display: grid;
-  grid-template-columns: 92px 1fr;
-  gap: 12px;
+  gap: 8px;
   text-align: left;
   background: rgba(24, 35, 30, 0.92);
   border: 1px solid var(--line);
@@ -144,6 +144,20 @@ main,
   color: inherit;
   min-height: 132px;
 }
+
+.deck-open {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.deck-card-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
 .deck-art img, .deck-art .fallback, .deck-hero-art img {
   width: 100%;
@@ -176,15 +190,47 @@ main,
 .level-high { color: var(--gold); }
 .suggest-list li { align-items: center; justify-content: flex-start; }
 .suggest-list img { width: 46px; border-radius: 6px; }
-.owned-tag { border: 1px solid #8fce7a; color: #b7e4b0; border-radius: 999px; padding: 0 8px; font-size: 0.75rem; }
-.paste-deck, .deck-page { margin-top: 22px; }
+.owned-tag, .missing-tag, .origin-tag {
+  border: 1px solid #8fce7a;
+  color: #b7e4b0;
+  border-radius: 999px;
+  padding: 0 8px;
+  font-size: 0.75rem;
+  font-style: normal;
+}
+.missing-tag { border-color: #f0b4a4; color: #f0b4a4; }
+.origin-tag { border-color: var(--line); color: var(--gold); justify-self: start; }
+.paste-deck, .deck-page, .deck-editor { margin-top: 22px; }
+.count-pill { font-family: var(--display); font-size: 1.8rem; margin: 8px 0; }
+.editor-list { list-style: none; padding: 0; margin: 12px 0 0; }
+.editor-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.editor-line > div:first-child { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; }
+.editor-actions, .mark-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.add-panel, .export-box, .restore-box, .stack { display: grid; gap: 10px; }
+.add-panel, .export-box, .restore-box {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+.check { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.check input { width: auto; }
+.row-actions .file-btn { margin-top: 0; }
 .paste-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
 .budget { max-width: 120px; }
 .issue-list li { color: #f0b4a4; padding: 4px 0; }
 
 @media (max-width: 700px) {
-  .deck-hero, .role-row { grid-template-columns: 1fr; }
-  .deck-card { grid-template-columns: 72px 1fr; }
+  .deck-hero, .role-row, .editor-line { grid-template-columns: 1fr; }
+  .deck-open { grid-template-columns: 72px 1fr; }
+  .editor-actions .qty { width: 100%; }
 }
 
 .btn, .chip, .file-btn {

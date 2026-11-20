@@ -1,8 +1,8 @@
 import { cardImages, type ScryfallCard } from './cards';
 import { parseDecklist } from './decklist';
 import { inferRoles, mergeRoles, type KnownCard, type RoleId } from './deckAnalyze';
-import { parseDeckFile, type DeckCardLine, type DeckFile, type DeckRecord } from './deckModel';
-import { fetchCollection, searchByQuery, searchOrdered } from './scryfall';
+import { formatSpec, parseDeckFile, type DeckCardLine, type DeckFile, type DeckFormat, type DeckRecord } from './deckModel';
+import { autocomplete, fetchCollection, searchByQuery, searchOrdered } from './scryfall';
 import { normalizeName } from './text';
 
 const CARD_KEY = 'mtg-deck-card-cache.v1';
@@ -24,6 +24,7 @@ export interface CachedPrinting {
   keywords: string[];
   legalityCommander: string;
   legalityStandard: string;
+  legalities: Record<string, string>;
   edhrecRank: number | null;
   priceUsd: number | null;
   image: string;
@@ -77,6 +78,7 @@ export function rememberPrinting(card: ScryfallCard): CachedPrinting {
     keywords: card.keywords ?? [],
     legalityCommander: card.legalities?.commander ?? '',
     legalityStandard: card.legalities?.standard ?? '',
+    legalities: card.legalities ?? {},
     edhrecRank: card.edhrec_rank ?? null,
     priceUsd: card.prices?.usd != null ? Number(card.prices.usd) : null,
     image: cardImages(card).front ?? '',
@@ -112,6 +114,15 @@ export function savePastedDecks(decks: DeckRecord[]): void {
   localStorage.setItem(PASTE_KEY, JSON.stringify(decks));
 }
 
+export function legalityFor(printing: CachedPrinting, format: DeckFormat): string {
+  const key = formatSpec(format).legality;
+  if (!key) return 'legal';
+  if (printing.legalities?.[key]) return printing.legalities[key];
+  if (key === 'commander' && printing.legalityCommander) return printing.legalityCommander;
+  if (key === 'standard' && printing.legalityStandard) return printing.legalityStandard;
+  return '';
+}
+
 export function pastedDeckFromText(name: string, format: DeckRecord['format'], commanders: string[], text: string): DeckRecord | null {
   const parsed = parseDecklist(text);
   if (parsed.error || parsed.lines.length === 0) return null;
@@ -119,17 +130,26 @@ export function pastedDeckFromText(name: string, format: DeckRecord['format'], c
     id: `pasted-${Date.now()}`,
     name: name.trim() || 'Pasted deck',
     format,
-    commanders,
     url: '',
     pasted: true,
-    mainboard: parsed.lines.map((line) => ({
-      qty: line.quantity,
-      name: line.name,
-      set: line.set ?? '',
-      collectorNumber: line.collectorNumber ?? '',
-      foil: line.finish === 'nonfoil' ? '' : line.finish,
-    })),
-    sideboard: [],
+    origin: 'local',
+    mainboard: parsed.lines.filter((line) => line.section === 'mainboard').map(lineFromParsed),
+    sideboard: parsed.lines.filter((line) => line.section === 'sideboard').map(lineFromParsed),
+    maybeboard: parsed.lines.filter((line) => line.section === 'maybeboard').map(lineFromParsed),
+    commanderBoard: parsed.lines.filter((line) => line.section === 'commander').map(lineFromParsed),
+    commanders: commanders.length > 0
+      ? commanders
+      : parsed.lines.filter((line) => line.section === 'commander').map((line) => line.name),
+  };
+}
+
+function lineFromParsed(line: { quantity: number; name: string; set?: string; collectorNumber?: string; finish: string }): DeckCardLine {
+  return {
+    qty: line.quantity,
+    name: line.name,
+    set: line.set ?? '',
+    collectorNumber: line.collectorNumber ?? '',
+    foil: line.finish === 'foil' || line.finish === 'etched' ? line.finish : '',
   };
 }
 
@@ -199,12 +219,12 @@ export function toKnown(
   line: DeckCardLine,
   printing: CachedPrinting | undefined,
   tags: RoleId[],
-  format: 'commander' | 'standard',
+  format: DeckFormat,
 ): KnownCard | null {
   if (!printing) return null;
   const known = knownFromPrinting(printing, line.qty);
   known.roles = mergeRoles(known.roles, tags);
-  known.legality = format === 'standard' ? printing.legalityStandard : printing.legalityCommander;
+  known.legality = legalityFor(printing, format);
   return known;
 }
 
@@ -245,7 +265,11 @@ export function printingById(id: string): CachedPrinting | undefined {
 
 export async function enrichCollection(ids: string[]): Promise<void> {
   ensureCache();
-  const missing = ids.filter((id) => id && !memoryCards.has(id));
+  const missing = ids.filter((id) => {
+    if (!id) return false;
+    const cached = memoryCards.get(id);
+    return !cached || !cached.legalities || Object.keys(cached.legalities).length === 0;
+  });
   if (!missing.length) return;
   try {
     const { cards } = await fetchCollection(missing.map((id) => ({ id })));
@@ -256,13 +280,64 @@ export async function enrichCollection(ids: string[]): Promise<void> {
   }
 }
 
-export async function upgradeSearch(identity: string[], format: 'commander' | 'standard'): Promise<CachedPrinting[]> {
-  const colors = identity.join('').toLowerCase();
-  const query = colors
-    ? `id<=${colors} legal:${format} game:paper`
-    : `legal:${format} game:paper`;
+export function deckCardQuery(text: string, format: DeckFormat, identity: string[], restrict: boolean): string {
+  const raw = text.trim();
+  if (!restrict) return raw;
+  const spec = formatSpec(format);
+  const parts = [raw];
+  if (spec.legality) parts.push(`legal:${spec.legality}`);
+  if (spec.commander && identity.length > 0) parts.push(`id<=${identity.join('').toLowerCase()}`);
+  if (!/game:/.test(raw)) parts.push('game:paper');
+  return parts.filter(Boolean).join(' ');
+}
+
+export async function upgradeSearch(identity: string[], format: DeckFormat): Promise<CachedPrinting[]> {
+  const query = deckCardQuery('', format, identity, true) || 'game:paper';
   const cards = await searchOrdered(query, 'edhrec');
   return cards.map((card) => rememberPrinting(card));
+}
+
+function escapeExact(name: string): string {
+  return name.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+export async function findCommanders(
+  query: string,
+  format: DeckFormat,
+  kind: 'commander' | 'partner' | 'background',
+  signal?: AbortSignal,
+): Promise<CachedPrinting[]> {
+  const names = await autocomplete(query, signal);
+  if (names.length === 0) return [];
+  const spec = formatSpec(format);
+  const legal = spec.legality || 'commander';
+  const clause = names.slice(0, 10).map((name) => `!"${escapeExact(name)}"`).join(' OR ');
+  const kindQuery = kind === 'background'
+    ? 't:background'
+    : kind === 'partner'
+      ? 'is:commander (keyword:partner OR keyword:"friends forever" OR o:"partner with")'
+      : 'is:commander';
+  const cards = await searchOrdered(`(${clause}) ${kindQuery} legal:${legal}`, 'name', signal);
+  return cards.map((card) => rememberPrinting(card));
+}
+
+export async function findLegalNames(
+  query: string,
+  format: DeckFormat,
+  identity: string[],
+  signal?: AbortSignal,
+): Promise<string[]> {
+  const names = await autocomplete(query, signal);
+  if (names.length === 0) return [];
+  try {
+    const clause = names.slice(0, 12).map((name) => `!"${escapeExact(name)}"`).join(' OR ');
+    const cards = await searchOrdered(deckCardQuery(`(${clause})`, format, identity, true), 'name', signal);
+    const allowed = new Set(cards.map((card) => card.name));
+    return names.filter((name) => allowed.has(name));
+  } catch (error) {
+    if (signal?.aborted || (error instanceof Error && error.name === 'AbortError')) throw error;
+    return names;
+  }
 }
 
 export function knownFromPrinting(printing: CachedPrinting, qty: number): KnownCard {
@@ -288,12 +363,12 @@ export function knownFromPrinting(printing: CachedPrinting, qty: number): KnownC
 
 export function knownFromCollection(
   entry: { scryfallId: string; quantity: number },
-  format: 'commander' | 'standard',
+  format: DeckFormat,
 ): KnownCard | null {
   const printing = printingById(entry.scryfallId);
   if (!printing) return null;
   const known = knownFromPrinting(printing, entry.quantity);
   known.owned = true;
-  known.legality = format === 'standard' ? printing.legalityStandard : printing.legalityCommander;
+  known.legality = legalityFor(printing, format);
   return known;
 }

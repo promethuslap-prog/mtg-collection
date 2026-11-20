@@ -1,5 +1,7 @@
 import type { Finish } from './types';
 
+export type DeckSection = 'commander' | 'mainboard' | 'sideboard' | 'maybeboard';
+
 export interface ParsedLine {
   lineNumber: number;
   raw: string;
@@ -8,6 +10,7 @@ export interface ParsedLine {
   set?: string;
   collectorNumber?: string;
   finish: Finish;
+  section: DeckSection;
 }
 
 export interface DeckParse {
@@ -26,13 +29,25 @@ export function parseDecklist(text: string): DeckParse {
   }
 
   const lines: ParsedLine[] = [];
+  let section: DeckSection = 'mainboard';
   rawLines.forEach((original, index) => {
     let raw = original.trim();
     if (!raw || raw.startsWith('//') || raw.startsWith('#')) return;
-    if (SECTION_HEADER.test(raw)) return;
+    if (SECTION_HEADER.test(raw)) {
+      if (/commander/i.test(raw)) section = 'commander';
+      else if (/sideboard/i.test(raw)) section = 'sideboard';
+      else if (/maybe|consider/i.test(raw)) section = 'maybeboard';
+      else if (/deck|main/i.test(raw)) section = 'mainboard';
+      return;
+    }
     if (/^name\s*:/i.test(raw)) return;
 
-    raw = raw.replace(/^(?:SB|Sideboard)\s*:?\s+/i, '');
+    let lineSection = section;
+    const sidePrefix = raw.match(/^(?:SB|Sideboard)\s*:?\s+/i);
+    if (sidePrefix) {
+      lineSection = 'sideboard';
+      raw = raw.slice(sidePrefix[0].length).trim();
+    }
     // Split cards use " // " in the name, so only # starts a trailing comment.
     raw = raw.replace(/\s+#\s.*$/, '').trim();
     if (!raw || SECTION_HEADER.test(raw)) return;
@@ -79,6 +94,7 @@ export function parseDecklist(text: string): DeckParse {
       set: setCode,
       collectorNumber,
       finish,
+      section: lineSection,
     });
   });
 

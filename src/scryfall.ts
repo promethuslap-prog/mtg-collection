@@ -90,7 +90,8 @@ async function request(url: string, init: RequestInit, gapMs: number): Promise<R
           });
         } catch (error) {
           if (signal?.aborted || (error instanceof Error && error.name === 'AbortError')) throw error;
-          await sleep(1200 * (attempt + 1), signal);
+          // Scryfall's 429 responses omit CORS headers, so the browser reports them as network errors.
+          await sleep(2000 * (attempt + 1), signal);
           last = new ScryfallError('Could not reach Scryfall. Check your connection and try again.', 0);
           continue;
         }
@@ -145,11 +146,12 @@ export async function searchPrintings(
   name: string,
   allLanguages: boolean,
   signal?: AbortSignal,
+  maxPages = 20,
 ): Promise<{ cards: ScryfallCard[]; truncated: boolean }> {
   const query = exactNameQuery(name, allLanguages);
   let url = `${API}/cards/search?order=released&dir=desc&unique=prints&q=${encodeURIComponent(query)}`;
   const cards: ScryfallCard[] = [];
-  for (let page = 0; page < 20; page += 1) {
+  for (let page = 0; page < maxPages; page += 1) {
     const body = await getJson<ListBody<ScryfallCard>>(url, GAP_SEARCH_MS, signal, true);
     cards.push(...(body.data ?? []));
     if (!body.has_more || !body.next_page) return { cards, truncated: false };

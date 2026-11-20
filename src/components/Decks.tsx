@@ -4,22 +4,32 @@ import {
   enrichCollection,
   knownFromCollection,
   knownFromPrinting,
+  legalityFor,
   loadDeckFile,
-  loadPastedDecks,
-  pastedDeckFromText,
   printingById,
   resolveCommanders,
   resolveLines,
-  savePastedDecks,
   tagOracleIds,
   tagsFor,
   toKnown,
   upgradeSearch,
   type CachedPrinting,
 } from '../deckData';
-import { deckSize, formatTarget, type DeckRecord } from '../deckModel';
+import { deckSize, formatTarget, isLocalDeck, playingLines, type DeckCardLine, type DeckRecord } from '../deckModel';
 import { formatSyncDate, formatUsd } from '../format';
+import { downloadText } from '../io';
+import { normalizeName } from '../text';
+import {
+  duplicateDeck,
+  loadUserDecks,
+  loadUserDecksFromIdb,
+  parseUserDeckBackup,
+  saveUserDecks,
+  serializeUserDecks,
+  upsertLine,
+} from '../userDecks';
 import { Pips } from './bits';
+import { DeckEditor, DeckExport, ImportDeckDialog, NewDeckDialog } from './DeckEditor';
 import type { CollectionEntry } from '../types';
 
 interface DecksProps {
@@ -29,31 +39,66 @@ interface DecksProps {
 export function DecksSection({ entries }: DecksProps) {
   const [decks, setDecks] = useState<DeckRecord[]>([]);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
-  const [pasted, setPasted] = useState<DeckRecord[]>(() => loadPastedDecks());
+  const [userDecks, setUserDecks] = useState<DeckRecord[]>(() => loadUserDecks());
   const [commanders, setCommanders] = useState<Record<string, CachedPrinting>>({});
   const [openId, setOpenId] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [restore, setRestore] = useState<DeckRecord[] | null>(null);
 
   useEffect(() => {
-    void loadDeckFile().then(async (file) => {
+    void loadDeckFile().then((file) => {
       if (!file) {
         setError('Could not read decks.json.');
         return;
       }
       setDecks(file.decks);
       setUpdatedAt(file.updatedAt);
-      const names = [...new Set(file.decks.flatMap((deck) => deck.commanders))];
-      const cards = await resolveCommanders(names);
-      const next: Record<string, CachedPrinting> = {};
-      for (const card of cards) next[card.name.toLowerCase()] = card;
-      setCommanders(next);
     }).catch((reason) => {
       console.warn(reason);
       setError('Could not load decks.');
     });
   }, []);
 
-  const all = [...decks, ...pasted];
+  useEffect(() => {
+    void loadUserDecksFromIdb().then((stored) => {
+      if (stored && stored.length > 0 && loadUserDecks().length === 0) setUserDecks(stored);
+    });
+  }, []);
+
+  useEffect(() => {
+    const names = [...new Set([...decks, ...userDecks].flatMap((deck) => deck.commanders))];
+    if (names.length === 0) return undefined;
+    let cancel = false;
+    void resolveCommanders(names).then((cards) => {
+      if (cancel) return;
+      const next: Record<string, CachedPrinting> = {};
+      for (const card of cards) next[card.name.toLowerCase()] = card;
+      setCommanders(next);
+    });
+    return () => {
+      cancel = true;
+    };
+  }, [decks, userDecks]);
+
+  function persist(next: DeckRecord[]) {
+    setUserDecks(next);
+    void saveUserDecks(next).then((message) => {
+      if (message) setError(message);
+    });
+  }
+
+  function addLocal(deck: DeckRecord) {
+    persist([deck, ...userDecks.filter((item) => item.id !== deck.id)]);
+    setOpenId(deck.id);
+    setEditing(true);
+    setCreating(false);
+    setImporting(false);
+  }
+
+  const all = [...userDecks, ...decks];
   const open = all.find((deck) => deck.id === openId) ?? null;
 
   return (
@@ -64,7 +109,17 @@ export function DecksSection({ entries }: DecksProps) {
           entries={entries}
           commanders={commanders}
           decks={all}
-          onBack={() => setOpenId(null)}
+          editing={editing && isLocalDeck(open)}
+          onEdit={() => setEditing(true)}
+          onDone={() => setEditing(false)}
+          onBack={() => { setOpenId(null); setEditing(false); }}
+          onChange={(deck) => persist(userDecks.map((item) => item.id === deck.id ? deck : item))}
+          onDuplicate={() => addLocal(duplicateDeck(open))}
+          onDelete={() => {
+            persist(userDecks.filter((item) => item.id !== open.id));
+            setOpenId(null);
+            setEditing(false);
+          }}
         />
       ) : (
         <>
@@ -72,9 +127,44 @@ export function DecksSection({ entries }: DecksProps) {
             <h2>Decks</h2>
             <p className="hint">
               {updatedAt ? `Deck list from Moxfield · ${formatSyncDate(updatedAt)}` : 'Loading decks from Moxfield.'}
-              {' '}Suggestions use the collection synced on this device.
+              {' '}Decks made here stay in this browser. Moxfield decks stay read-only.
             </p>
           </div>
+          <div className="row-actions">
+            <button type="button" className="btn primary" onClick={() => setCreating(true)}>New deck</button>
+            <button type="button" className="btn" onClick={() => setImporting(true)}>Import</button>
+            <button type="button" className="btn" onClick={() => downloadText(`mtg-decks-${new Date().toISOString().slice(0, 10)}.json`, serializeUserDecks(userDecks), 'application/json')}>Back up my decks</button>
+            <label className="btn file-btn">
+              Restore
+              <input
+                aria-label="Restore deck backup"
+                type="file"
+                accept="application/json,.json"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = '';
+                  if (!file) return;
+                  void file.text().then((text) => {
+                    const parsed = parseUserDeckBackup(text);
+                    if (parsed.error) {
+                      setError(parsed.error);
+                      return;
+                    }
+                    setRestore(parsed.decks);
+                  });
+                }}
+              />
+            </label>
+          </div>
+          {restore && (
+            <div className="restore-box" role="status">
+              <p>Restore {restore.length} saved {restore.length === 1 ? 'deck' : 'decks'}? This replaces decks made on this device.</p>
+              <div className="row-actions">
+                <button type="button" className="btn primary" onClick={() => { persist(restore); setRestore(null); }}>Restore decks</button>
+                <button type="button" className="btn" onClick={() => setRestore(null)}>Cancel</button>
+              </div>
+            </div>
+          )}
           {error && <p role="alert">{error}</p>}
           <div className="deck-grid">
             {all.map((deck) => {
@@ -82,29 +172,36 @@ export function DecksSection({ entries }: DecksProps) {
               const identity = combinedIdentity(arts.map((card) => card.colorIdentity));
               const count = deckSize(deck);
               const target = formatTarget(deck.format);
+              const local = isLocalDeck(deck);
               return (
-                <button key={deck.id} type="button" className="deck-card" onClick={() => setOpenId(deck.id)}>
-                  <span className="deck-art">
-                    {arts[0]?.image ? <img src={arts[0].image} alt="" /> : <span className="fallback">{deck.commanders[0] ?? deck.name}</span>}
-                  </span>
-                  <span className="deck-copy">
-                    <strong>{deck.name}</strong>
-                    <span className="muted">{deck.format} · {count}/{target}{deck.pasted ? ' · pasted' : ''}</span>
-                    <Pips colors={identity} />
-                    <span className={`health health-${healthTone(count, target)}`}>Health {quickHealth(count, target)}</span>
-                  </span>
-                </button>
+                <article key={deck.id} className="deck-card" data-deck-name={deck.name}>
+                  <button type="button" className="deck-open" onClick={() => { setOpenId(deck.id); setEditing(false); }}>
+                    <span className="deck-art">
+                      {arts[0]?.image ? <img src={arts[0].image} alt="" /> : <span className="fallback">{deck.commanders[0] ?? deck.name}</span>}
+                    </span>
+                    <span className="deck-copy">
+                      <strong>{deck.name}</strong>
+                      <span className="origin-tag">{local ? 'Made here' : 'From Moxfield'}</span>
+                      <span className="muted">{deck.format} · {count}/{target}</span>
+                      <Pips colors={identity} />
+                      <span className={`health health-${healthTone(count, target)}`}>Health {quickHealth(count, target)}</span>
+                    </span>
+                  </button>
+                  <div className="deck-card-actions">
+                    {local ? (
+                      <button type="button" className="btn" aria-label={`Edit ${deck.name}`} onClick={() => { setOpenId(deck.id); setEditing(true); }}>Edit</button>
+                    ) : (
+                      <button type="button" className="btn" aria-label={`Duplicate ${deck.name}`} onClick={() => addLocal(duplicateDeck(deck))}>Duplicate</button>
+                    )}
+                  </div>
+                </article>
               );
             })}
           </div>
-          <PasteDeck onSave={(deck) => {
-            const next = [deck, ...pasted];
-            setPasted(next);
-            savePastedDecks(next);
-            setOpenId(deck.id);
-          }} />
         </>
       )}
+      {creating && <NewDeckDialog onClose={() => setCreating(false)} onCreate={addLocal} />}
+      {importing && <ImportDeckDialog onClose={() => setImporting(false)} onCreate={addLocal} />}
     </div>
   );
 }
@@ -114,36 +211,57 @@ function DeckPage({
   entries,
   commanders,
   decks,
+  editing,
+  onEdit,
+  onDone,
   onBack,
+  onChange,
+  onDuplicate,
+  onDelete,
 }: {
   deck: DeckRecord;
   entries: CollectionEntry[];
   commanders: Record<string, CachedPrinting>;
   decks: DeckRecord[];
+  editing: boolean;
+  onEdit: () => void;
+  onDone: () => void;
   onBack: () => void;
+  onChange: (deck: DeckRecord) => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
 }) {
   const [report, setReport] = useState<DeckReport | null>(null);
   const [budget, setBudget] = useState(5);
   const [status, setStatus] = useState('Reading the deck…');
   const [panel, setPanel] = useState<'add' | 'buy' | 'cut' | 'swap'>('add');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const local = isLocalDeck(deck);
 
   useEffect(() => {
     let cancel = false;
     setReport(null);
     setStatus('Matching printings on Scryfall…');
     void (async () => {
-      const printings = await resolveLines(deck.mainboard);
+      const lines = playingLines(deck);
+      const printings = await resolveLines(lines);
       const byKey = new Map(printings.map((card) => [`${card.set}|${card.collectorNumber.toLowerCase()}`, card]));
       const byName = new Map(printings.map((card) => [card.name.toLowerCase(), card]));
-      const paired = deck.mainboard.map((line) => {
+      const paired = lines.map((line) => {
         const printing = (line.set && line.collectorNumber
           ? byKey.get(`${line.set}|${line.collectorNumber.toLowerCase()}`)
           : undefined) ?? byName.get(line.name.toLowerCase());
         return { line, printing };
       });
-      const identityCards = deck.commanders.map((name) => commanders[name.toLowerCase()]).filter(Boolean);
-      const identity = combinedIdentity(identityCards.map((card) => card.colorIdentity));
-      const otherDecks = decks.map((item) => ({ id: item.id, name: item.name, names: item.mainboard.map((line) => line.name) }));
+      const names = deck.commanders.length > 0 ? deck.commanders : (deck.commanderBoard ?? []).map((line) => line.name);
+      const identityCards = names.map((name) => commanders[name.toLowerCase()]).filter(Boolean);
+      const resolved = identityCards.length > 0 ? identityCards : await resolveCommanders(names);
+      const identity = combinedIdentity(resolved.map((card) => card.colorIdentity));
+      const otherDecks = decks.map((item) => ({
+        id: item.id,
+        name: item.name,
+        names: [...playingLines(item), ...item.sideboard, ...(item.maybeboard ?? [])].map((line) => line.name),
+      }));
       const build = (upgrades: KnownCard[]) => {
         const known = paired.map((item) => toKnown(item.line, item.printing, item.printing ? tagsFor(item.printing.oracleId) : [], deck.format)).filter((card): card is KnownCard => card !== null);
         const owned = entries.map((entry) => knownFromCollection(entry, deck.format)).filter((card): card is KnownCard => card !== null);
@@ -161,7 +279,7 @@ function DeckPage({
       if (cancel) return;
       const upgrades = (await upgradeSearch(identity, deck.format)).map((printing) => {
         const card = knownFromPrinting(printing, 1);
-        card.legality = deck.format === 'standard' ? printing.legalityStandard : printing.legalityCommander;
+        card.legality = legalityFor(printing, deck.format);
         return card;
       });
       if (!cancel) setReport(build(upgrades));
@@ -176,23 +294,63 @@ function DeckPage({
 
   const arts = deck.commanders.map((name) => commanders[name.toLowerCase()]).filter(Boolean);
 
+  function addNamed(name: string) {
+    if (!local) return;
+    const present = playingLines(deck).some((line) => normalizeName(line.name) === normalizeName(name));
+    if (present) return;
+    const owned = entries.find((entry) => normalizeName(entry.name) === normalizeName(name));
+    const line: DeckCardLine = owned
+      ? { qty: 1, name: owned.name, set: owned.set, collectorNumber: owned.collectorNumber, foil: owned.finish === 'nonfoil' ? '' : owned.finish }
+      : { qty: 1, name, set: '', collectorNumber: '', foil: '' };
+    onChange({ ...deck, mainboard: upsertLine(deck.mainboard, line) });
+  }
+
   return (
     <article className="deck-page" data-deck-page={deck.name}>
-      <button type="button" className="btn" onClick={onBack}>All decks</button>
+      <div className="row-actions">
+        <button type="button" className="btn" onClick={onBack}>All decks</button>
+        {local && !editing && <button type="button" className="btn" onClick={onEdit}>Edit deck</button>}
+        {!local && <button type="button" className="btn" onClick={onDuplicate}>Duplicate</button>}
+        {local && !confirmDelete && <button type="button" className="btn" onClick={() => setConfirmDelete(true)}>Delete</button>}
+        {confirmDelete && (
+          <>
+            <span>Delete {deck.name} from this device?</span>
+            <button type="button" className="btn" onClick={onDelete}>Delete deck</button>
+            <button type="button" className="btn" onClick={() => setConfirmDelete(false)}>Cancel</button>
+          </>
+        )}
+      </div>
       <header className="deck-hero">
         <div className="deck-hero-art">
           {arts.map((card) => <img key={card.id} src={card.image} alt={card.name} />)}
         </div>
         <div>
-          <p className="eyebrow">{deck.format}</p>
+          <p className="eyebrow">{local ? 'Made here' : 'From Moxfield'} · {deck.format}</p>
           <h2>{deck.name}</h2>
           <Pips colors={combinedIdentity(arts.map((card) => card.colorIdentity))} />
+          {!local && <p className="hint">This deck comes from Moxfield and stays read-only here. Edit it on Moxfield, or duplicate it to change a copy on this device.</p>}
           {deck.url && <p><a href={deck.url} target="_blank" rel="noreferrer">View on Moxfield</a></p>}
-          {report && <p className={`health health-${report.health >= 75 ? 'ok' : 'low'}`}>Health {report.health} · {report.cardCount}/{report.target} cards · avg MV {report.averageMv.toFixed(2)}</p>}
+          {report && !editing && <p className={`health health-${report.health >= 75 ? 'ok' : 'low'}`}>Health {report.health} · {report.cardCount}/{report.target} cards · avg MV {report.averageMv.toFixed(2)}</p>}
         </div>
       </header>
-      {status && <p role="status">{status}</p>}
-      {report && <DeckBody report={report} budget={budget} onBudget={setBudget} panel={panel} onPanel={setPanel} />}
+      {local && !editing && <DeckExport deck={deck} />}
+      {editing ? (
+        <DeckEditor deck={deck} entries={entries} decks={decks} onChange={onChange} onDone={onDone} />
+      ) : (
+        <>
+          {status && <p role="status">{status}</p>}
+          {report && (
+            <DeckBody
+              report={report}
+              budget={budget}
+              onBudget={setBudget}
+              panel={panel}
+              onPanel={setPanel}
+              onAdd={local ? addNamed : undefined}
+            />
+          )}
+        </>
+      )}
     </article>
   );
 }
@@ -203,12 +361,14 @@ function DeckBody({
   onBudget,
   panel,
   onPanel,
+  onAdd,
 }: {
   report: DeckReport;
   budget: number;
   onBudget: (value: number) => void;
   panel: 'add' | 'buy' | 'cut' | 'swap';
   onPanel: (panel: 'add' | 'buy' | 'cut' | 'swap') => void;
+  onAdd?: (name: string) => void;
 }) {
   const maxCurve = Math.max(1, ...report.curve);
   return (
@@ -274,7 +434,7 @@ function DeckBody({
             </label>
           )}
         </div>
-        {panel === 'add' && <SuggestionList items={report.adds} empty="No owned cards fit this deck." />}
+        {panel === 'add' && <SuggestionList items={report.adds} empty="No owned cards fit this deck." onAdd={onAdd} />}
         {panel === 'buy' && <SuggestionList items={report.upgrades.filter((item) => item.price == null || item.price <= budget)} empty="No upgrades under this budget." />}
         {panel === 'cut' && <SuggestionList items={report.cuts} empty="Nothing stands out to cut." />}
         {panel === 'swap' && (
@@ -305,7 +465,13 @@ function DeckBody({
             <div key={group.role}>
               <h4>{group.role}</h4>
               <ul className="suggest-list">
-                {group.cards.map((card) => <li key={card.name}><strong>{card.name}</strong> <span className="muted">{card.reason}</span></li>)}
+                {group.cards.map((card) => (
+                  <li key={card.name}>
+                    <strong>{card.name}</strong>
+                    <span className="muted">{card.reason}</span>
+                    {onAdd && <button type="button" className="btn" aria-label={`Add ${card.name}`} onClick={() => onAdd(card.name)}>Add</button>}
+                  </li>
+                ))}
               </ul>
             </div>
           ))}
@@ -315,7 +481,7 @@ function DeckBody({
   );
 }
 
-function SuggestionList({ items, empty }: { items: DeckReport['adds']; empty: string }) {
+function SuggestionList({ items, empty, onAdd }: { items: DeckReport['adds']; empty: string; onAdd?: (name: string) => void }) {
   if (items.length === 0) return <p>{empty}</p>;
   return (
     <ul className="suggest-list" data-suggestion-count={items.length}>
@@ -328,50 +494,10 @@ function SuggestionList({ items, empty }: { items: DeckReport['adds']; empty: st
             {item.price != null && <em>{formatUsd(item.price)}</em>}
             <span className="muted">{item.reason}{item.decks.length ? ` Also in ${item.decks.join(', ')}.` : ''}</span>
           </span>
+          {onAdd && item.owned && <button type="button" className="btn" aria-label={`Add ${item.name}`} onClick={() => onAdd(item.name)}>Add</button>}
         </li>
       ))}
     </ul>
-  );
-}
-
-function PasteDeck({ onSave }: { onSave: (deck: DeckRecord) => void }) {
-  const [name, setName] = useState('Pasted deck');
-  const [format, setFormat] = useState<DeckRecord['format']>('commander');
-  const [commanders, setCommanders] = useState('');
-  const [text, setText] = useState('');
-  const [message, setMessage] = useState('');
-  return (
-    <section className="paste-deck">
-      <h3>Analyze a pasted deck</h3>
-      <p className="hint">Paste plain text or a Moxfield list, like <code>1 Sol Ring (C21) 263</code>. It stays in this browser.</p>
-      <div className="paste-grid">
-        <label className="field">Name<input value={name} onChange={(event) => setName(event.target.value)} /></label>
-        <label className="field">Format
-          <select value={format} onChange={(event) => setFormat(event.target.value as DeckRecord['format'])}>
-            <option value="commander">Commander</option>
-            <option value="standard">Standard</option>
-          </select>
-        </label>
-        <label className="field">Commanders<input value={commanders} placeholder="Jadar, Ghoulcaller of Nephalia" onChange={(event) => setCommanders(event.target.value)} /></label>
-      </div>
-      <textarea rows={6} value={text} onChange={(event) => setText(event.target.value)} placeholder={'1 Sol Ring (C21) 263\n1 Jadar, Ghoulcaller of Nephalia'} />
-      <button
-        type="button"
-        className="btn primary"
-        onClick={() => {
-          const deck = pastedDeckFromText(name, format, commanders.split(',').map((item) => item.trim()).filter(Boolean), text);
-          if (!deck) {
-            setMessage('No cards found. Use lines like 1 Sol Ring (C21) 263.');
-            return;
-          }
-          setMessage('');
-          onSave(deck);
-        }}
-      >
-        Analyze this deck
-      </button>
-      {message && <p role="alert">{message}</p>}
-    </section>
   );
 }
 
