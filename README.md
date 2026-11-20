@@ -13,7 +13,7 @@ Card names, images, and prices come from [Scryfall](https://scryfall.com).
 - Browse the collection as a grid or a list
 - Filter by color, type, set, and rarity, and sort by name, price, or date added
 - See total cards, unique cards, estimated value, and a breakdown by color and set
-- Refresh USD market prices from Scryfall, and pick up new TCGplayer orders
+- Refresh USD market prices from Scryfall. Moxfield is the main list, and TCGplayer fills in cards Moxfield does not already have
 - Export or import JSON and CSV, or paste a decklist such as `4 Lightning Bolt`
 
 ## Local development
@@ -31,15 +31,19 @@ npm run build
 npm run preview
 ```
 
-## TCGplayer purchases
+## Moxfield and TCGplayer
 
-The site reads `public/purchases.json`. That file is copied into the build and served at:
+Moxfield is the main list. `public/moxfield.json` is served at:
+
+https://promethuslap-prog.github.io/mtg-collection/moxfield.json
+
+`public/purchases.json` is served at:
 
 https://promethuslap-prog.github.io/mtg-collection/purchases.json
 
-Every push to `main`, including a commit that only updates `public/purchases.json`, runs `.github/workflows/pages.yml` and republishes the site. There is no path filter on that workflow.
+Every push to `main` runs `.github/workflows/pages.yml` and republishes the site. There is no path filter, so a daily update of either file is enough.
 
-On each visit, and when you press Refresh, the page fetches the file with a cache-busting query. Each order `id` is imported once on that browser and then remembered. Later edits or removals are left alone. Undo removes the cards from that import and still keeps the order ids marked, so a reload does not add them again.
+On each visit, and when you press Refresh, the page fetches both files with a cache-busting query. The Moxfield rows mirror that file. TCGplayer rows are only cards whose name is not in Moxfield. Cards you add in the tracker stay separate. A short note appears when either synced list changed since the last visit.
 
 ## Where your cards are stored
 

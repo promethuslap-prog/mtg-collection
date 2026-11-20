@@ -4,23 +4,38 @@ import type { CollectionEntry, SortKey, ViewMode } from './types';
 
 const KEY = 'mtg-collection.v1';
 
-export interface SavedData {
-  version: 1;
-  entries: CollectionEntry[];
+export interface BinderState {
+  manualEntries: CollectionEntry[];
+  layerMoxfield: CollectionEntry[];
+  layerTcgplayer: CollectionEntry[];
+  layerPurchases: CollectionEntry[];
+  moxfieldUpdatedAt: string | null;
   pricesUpdatedAt: number | null;
   view: ViewMode;
   sort: SortKey;
+  migrationDone: boolean;
+  legacyEntries: CollectionEntry[];
   importedOrderIds: string[];
 }
 
-export const EMPTY_SAVE: SavedData = {
-  version: 1,
-  entries: [],
-  pricesUpdatedAt: null,
-  view: 'grid',
-  sort: 'added-desc',
-  importedOrderIds: [],
-};
+export interface SavedBinder {
+  version: 1;
+  model: 2;
+  manualEntries: CollectionEntry[];
+  layerMoxfield: CollectionEntry[];
+  layerTcgplayer: CollectionEntry[];
+  layerPurchases: CollectionEntry[];
+  moxfieldUpdatedAt: string | null;
+  pricesUpdatedAt: number | null;
+  view: ViewMode;
+  sort: SortKey;
+  migrationDone: true;
+}
+
+function entriesOf(value: unknown): CollectionEntry[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => sanitizeEntry(entry)).filter((entry): entry is CollectionEntry => entry !== null);
+}
 
 function orderIds(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -37,28 +52,76 @@ function browserStorage(): Storage | null {
   }
 }
 
-export function loadCollection(): SavedData {
+const EMPTY: BinderState = {
+  manualEntries: [],
+  layerMoxfield: [],
+  layerTcgplayer: [],
+  layerPurchases: [],
+  moxfieldUpdatedAt: null,
+  pricesUpdatedAt: null,
+  view: 'grid',
+  sort: 'added-desc',
+  migrationDone: true,
+  legacyEntries: [],
+  importedOrderIds: [],
+};
+
+export function loadBinder(): BinderState {
   const storage = browserStorage();
-  if (!storage) return EMPTY_SAVE;
+  if (!storage) return EMPTY;
   try {
     const raw = storage.getItem(KEY);
-    if (!raw) return EMPTY_SAVE;
-    const data = JSON.parse(raw) as Partial<SavedData>;
-    if (!data || data.version !== 1 || !Array.isArray(data.entries)) return EMPTY_SAVE;
+    if (!raw) return EMPTY;
+    const data = JSON.parse(raw) as {
+      model?: number;
+      version?: number;
+      entries?: unknown;
+      manualEntries?: unknown;
+      layerMoxfield?: unknown;
+      layerTcgplayer?: unknown;
+      layerPurchases?: unknown;
+      moxfieldUpdatedAt?: unknown;
+      pricesUpdatedAt?: unknown;
+      view?: unknown;
+      sort?: unknown;
+      migrationDone?: unknown;
+      importedOrderIds?: unknown;
+    };
+    if (!data || data.version !== 1) return EMPTY;
+    const view: ViewMode = data.view === 'list' ? 'list' : 'grid';
+    const sort = isSortKey(data.sort) ? data.sort : 'added-desc';
+    const pricesUpdatedAt = typeof data.pricesUpdatedAt === 'number' ? data.pricesUpdatedAt : null;
+    if (data.model === 2 && data.migrationDone === true) {
+      return {
+        manualEntries: entriesOf(data.manualEntries),
+        layerMoxfield: entriesOf(data.layerMoxfield),
+        layerTcgplayer: entriesOf(data.layerTcgplayer),
+        layerPurchases: entriesOf(data.layerPurchases),
+        moxfieldUpdatedAt: typeof data.moxfieldUpdatedAt === 'string' ? data.moxfieldUpdatedAt : null,
+        pricesUpdatedAt,
+        view,
+        sort,
+        migrationDone: true,
+        legacyEntries: [],
+        importedOrderIds: [],
+      };
+    }
     return {
-      version: 1,
-      entries: data.entries.map((entry) => sanitizeEntry(entry)).filter((entry): entry is CollectionEntry => entry !== null),
-      pricesUpdatedAt: typeof data.pricesUpdatedAt === 'number' ? data.pricesUpdatedAt : null,
-      view: data.view === 'list' ? 'list' : 'grid',
-      sort: isSortKey(data.sort) ? data.sort : 'added-desc',
+      ...EMPTY,
+      migrationDone: false,
+      legacyEntries: entriesOf(data.entries),
       importedOrderIds: orderIds(data.importedOrderIds),
+      pricesUpdatedAt,
+      view,
+      sort,
+      manualEntries: [],
     };
   } catch {
-    return EMPTY_SAVE;
+    return EMPTY;
   }
 }
 
-export function saveCollection(data: SavedData): string | null {
+export function saveBinder(data: SavedBinder): string | null {
   const storage = browserStorage();
   if (!storage) return 'This browser will not store the collection.';
   try {

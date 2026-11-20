@@ -55,10 +55,16 @@ export function CardDetail({ entry, onClose, onQuantity, onRemove }: CardDetailP
                 <dd>{entry.condition}</dd>
               </div>
             )}
-            {entry.fromTcgplayer && (
+            {(entry.source === 'tcgplayer' || entry.fromTcgplayer) && entry.source !== 'moxfield' && (
               <div>
                 <dt>Source</dt>
                 <dd>TCGplayer</dd>
+              </div>
+            )}
+            {entry.source === 'moxfield' && (
+              <div>
+                <dt>Source</dt>
+                <dd>Moxfield</dd>
               </div>
             )}
             <div>
@@ -81,21 +87,29 @@ export function CardDetail({ entry, onClose, onQuantity, onRemove }: CardDetailP
               </div>
             )}
           </dl>
-          <div className="field">
-            <span>Quantity</span>
-            <Quantity value={entry.quantity} onChange={(quantity) => onQuantity(entry.id, quantity)} />
-          </div>
+          {entry.source === 'manual' || !entry.source ? (
+            <>
+              <div className="field">
+                <span>Quantity</span>
+                <Quantity value={entry.quantity} onChange={(quantity) => onQuantity(entry.id, quantity)} />
+              </div>
+              <div className="row-actions">
+                <button
+                  type="button"
+                  className="btn danger"
+                  onClick={() => {
+                    onRemove(entry.id);
+                    onClose();
+                  }}
+                >
+                  Remove
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className="hint">Quantity {entry.quantity}. This copy follows {entry.source === 'moxfield' ? 'Moxfield' : 'TCGplayer'} and updates on refresh.</p>
+          )}
           <div className="row-actions">
-            <button
-              type="button"
-              className="btn danger"
-              onClick={() => {
-                onRemove(entry.id);
-                onClose();
-              }}
-            >
-              Remove
-            </button>
             {entry.scryfallUri && (
               <a className="btn" href={entry.scryfallUri} target="_blank" rel="noreferrer">
                 View on Scryfall

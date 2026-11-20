@@ -168,6 +168,7 @@ export function updateEntryFromCard(entry: CollectionEntry, card: ScryfallCard):
     quantity: entry.quantity,
     ...(entry.condition ? { condition: entry.condition } : {}),
     ...(entry.fromTcgplayer ? { fromTcgplayer: true } : {}),
+    ...(entry.source ? { source: entry.source } : {}),
   };
 }
 

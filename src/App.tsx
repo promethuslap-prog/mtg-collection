@@ -6,11 +6,12 @@ import { CollectionBrowser } from './components/CollectionBrowser';
 import { Stats } from './components/Stats';
 import { mergeIntoCollection } from './collection';
 import { fetchCollection } from './scryfall';
-import { updateEntryFromCard } from './cards';
-import { importNewOrders } from './importPurchases';
-import { applyQuantityUndo, purchaseMessage, type QuantityDelta } from './purchases';
-import { loadCollection, saveCollection } from './storage';
-import { countNoun, finishLabel } from './format';
+import { entryKey, updateEntryFromCard } from './cards';
+import { loadPurchaseFile, resolvePurchaseOrders } from './importPurchases';
+import { layerChangeNote, manualEntriesAfterImport } from './layers';
+import { syncDerivedLayers } from './syncLayers';
+import { loadBinder, saveBinder } from './storage';
+import { countNoun, finishLabel, formatSyncDate } from './format';
 import { EMPTY_FILTERS, type CollectionEntry, type Filters, type SortKey, type ViewMode } from './types';
 
 interface Toast {
@@ -18,44 +19,63 @@ interface Toast {
   action?: { label: string; run: () => void };
 }
 
-interface PurchaseNotice {
-  message: string;
-  skipped: string[];
-  deltas: QuantityDelta[];
-}
-
 export function App() {
-  const saved = useRef(loadCollection());
+  const saved = useRef(loadBinder());
   const warned = useRef(false);
   const toastTimer = useRef<number | null>(null);
-  const purchaseLock = useRef(false);
-  const [entries, setEntries] = useState<CollectionEntry[]>(saved.current.entries);
+  const syncLock = useRef<Promise<void> | null>(null);
+  const booted = useRef(false);
+  const migrationDone = useRef(saved.current.migrationDone);
+  const [manualEntries, setManualEntries] = useState<CollectionEntry[]>(saved.current.migrationDone ? saved.current.manualEntries : saved.current.legacyEntries);
+  const [moxfieldEntries, setMoxfieldEntries] = useState<CollectionEntry[]>(saved.current.layerMoxfield);
+  const [tcgplayerEntries, setTcgplayerEntries] = useState<CollectionEntry[]>(saved.current.layerTcgplayer);
+  const [purchaseCache, setPurchaseCache] = useState<CollectionEntry[]>(saved.current.layerPurchases);
+  const [moxfieldUpdatedAt, setMoxfieldUpdatedAt] = useState<string | null>(saved.current.moxfieldUpdatedAt);
+  const [syncState, setSyncState] = useState<'idle' | 'loading' | 'done'>(saved.current.migrationDone ? 'idle' : 'loading');
   const [view, setView] = useState<ViewMode>(saved.current.view);
   const [sort, setSort] = useState<SortKey>(saved.current.sort);
   const [pricesUpdatedAt, setPricesUpdatedAt] = useState<number | null>(saved.current.pricesUpdatedAt);
-  const [importedOrderIds, setImportedOrderIds] = useState<string[]>(saved.current.importedOrderIds);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [toast, setToast] = useState<Toast | null>(null);
-  const [purchaseNotice, setPurchaseNotice] = useState<PurchaseNotice | null>(null);
   const [backupOpen, setBackupOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshLabel, setRefreshLabel] = useState<string | null>(null);
+  const entries = [...manualEntries, ...moxfieldEntries, ...tcgplayerEntries];
   const entriesRef = useRef(entries);
-  const importedRef = useRef(importedOrderIds);
+  const manualRef = useRef(manualEntries);
+  const moxfieldRef = useRef(moxfieldEntries);
+  const tcgRef = useRef(tcgplayerEntries);
+  const purchaseCacheRef = useRef(purchaseCache);
   entriesRef.current = entries;
-  importedRef.current = importedOrderIds;
+  manualRef.current = manualEntries;
+  moxfieldRef.current = moxfieldEntries;
+  tcgRef.current = tcgplayerEntries;
+  purchaseCacheRef.current = purchaseCache;
 
   useEffect(() => {
-    const error = saveCollection({ version: 1, entries, pricesUpdatedAt, view, sort, importedOrderIds });
+    if (!booted.current) return;
+    const error = saveBinder({
+      version: 1,
+      model: 2,
+      manualEntries,
+      layerMoxfield: moxfieldEntries,
+      layerTcgplayer: tcgplayerEntries,
+      layerPurchases: purchaseCache,
+      moxfieldUpdatedAt,
+      pricesUpdatedAt,
+      view,
+      sort,
+      migrationDone: true,
+    });
     if (error && !warned.current) {
       warned.current = true;
       showToast('Could not save on this device. Export a backup so you do not lose cards.');
     }
-  }, [entries, pricesUpdatedAt, view, sort, importedOrderIds]);
+  }, [manualEntries, moxfieldEntries, tcgplayerEntries, purchaseCache, moxfieldUpdatedAt, pricesUpdatedAt, view, sort]);
 
   useEffect(() => {
-    void syncPurchases(false);
+    void syncLayers(false);
   }, []);
 
   useEffect(() => () => {
@@ -69,60 +89,102 @@ export function App() {
   }
 
   function addEntry(entry: CollectionEntry) {
-    const previous = entries.find((item) => item.id === entry.id)?.quantity ?? 0;
-    setEntries((current) => mergeIntoCollection(current, [entry]));
-    const total = previous + entry.quantity;
-    showToast(previous > 0 ? `Updated ${entry.name} to ${total}` : `Added ${entry.quantity}× ${entry.name} (${finishLabel(entry.finish)})`);
+    const manual = { ...entry, source: 'manual' as const, id: entryKey(entry.scryfallId, entry.finish) };
+    delete manual.fromTcgplayer;
+    const previous = manualRef.current.find((item) => item.id === manual.id)?.quantity ?? 0;
+    const next = mergeIntoCollection(manualRef.current, [manual]);
+    manualRef.current = next;
+    setManualEntries(next);
+    const total = previous + manual.quantity;
+    showToast(previous > 0 ? `Updated ${manual.name} to ${total}` : `Added ${manual.quantity}× ${manual.name} (${finishLabel(manual.finish)})`);
   }
 
   function setQuantity(id: string, quantity: number) {
     const next = Math.floor(quantity);
     if (!Number.isFinite(next) || next < 1) return;
-    setEntries((current) => current.map((entry) => (entry.id === id ? { ...entry, quantity: Math.min(9999, next) } : entry)));
+    if (!manualRef.current.some((entry) => entry.id === id)) return;
+    const updated = manualRef.current.map((entry) => (entry.id === id ? { ...entry, quantity: Math.min(9999, next) } : entry));
+    manualRef.current = updated;
+    setManualEntries(updated);
   }
 
   function removeEntry(id: string) {
-    const index = entries.findIndex((entry) => entry.id === id);
+    const index = manualRef.current.findIndex((entry) => entry.id === id);
     if (index < 0) return;
-    const removed = entries[index];
-    setEntries(entries.filter((entry) => entry.id !== id));
+    const removed = manualRef.current[index];
+    const updated = manualRef.current.filter((entry) => entry.id !== id);
+    manualRef.current = updated;
+    setManualEntries(updated);
     showToast(`Removed ${removed.quantity}× ${removed.name}`, {
       label: 'Undo',
       run: () => {
-        setEntries((current) => {
+        setManualEntries((current) => {
           if (current.some((entry) => entry.id === removed.id)) return current;
           const next = current.slice();
           next.splice(Math.min(index, next.length), 0, removed);
+          manualRef.current = next;
           return next;
         });
       },
     });
   }
 
-  async function syncPurchases(announceErrors: boolean) {
-    if (purchaseLock.current) return;
-    purchaseLock.current = true;
-    try {
-      const result = await importNewOrders(importedRef.current);
-      if (!result) return;
-      const nextIds = [...new Set([...importedRef.current, ...result.processedOrderIds])];
-      importedRef.current = nextIds;
-      setImportedOrderIds(nextIds);
-      if (result.entries.length === 0 && result.skipped.length === 0) return;
-      const merged = mergeIntoCollection(entriesRef.current, result.entries);
-      entriesRef.current = merged;
-      setEntries(merged);
-      setPurchaseNotice({
-        message: purchaseMessage(result.addedCards, result.matchedOrderIds.length || result.processedOrderIds.length),
-        skipped: result.skipped,
-        deltas: result.entries.map((entry) => ({ id: entry.id, added: entry.quantity })),
-      });
-    } catch (error) {
-      if (announceErrors) showToast(error instanceof Error ? error.message : 'Could not import TCGplayer orders.');
-      else console.warn(error);
-    } finally {
-      purchaseLock.current = false;
+  async function migrateManual(): Promise<{ entries: CollectionEntry[]; skipTcgplayer: boolean }> {
+    const initial = saved.current;
+    if (migrationDone.current) return { entries: manualRef.current, skipTcgplayer: false };
+    const asManual = (list: CollectionEntry[]) => list.map((entry) => {
+      const next = { ...entry, source: 'manual' as const, id: entryKey(entry.scryfallId, entry.finish) };
+      delete next.fromTcgplayer;
+      return next;
+    });
+    if (initial.importedOrderIds.length === 0) {
+      migrationDone.current = true;
+      return { entries: asManual(initial.legacyEntries.filter((entry) => !entry.fromTcgplayer)), skipTcgplayer: false };
     }
+    const purchases = await loadPurchaseFile();
+    if (!purchases) return { entries: asManual(initial.legacyEntries), skipTcgplayer: true };
+    const resolved = await resolvePurchaseOrders(purchases.orders.filter((order) => initial.importedOrderIds.includes(order.id)));
+    migrationDone.current = true;
+    return { entries: manualEntriesAfterImport(initial.legacyEntries, resolved.entries), skipTcgplayer: false };
+  }
+
+  async function syncLayers(announceErrors: boolean) {
+    if (syncLock.current) return syncLock.current;
+    const run = (async () => {
+      setSyncState('loading');
+      try {
+        const manual = await migrateManual();
+        manualRef.current = manual.entries;
+        setManualEntries(manual.entries);
+        const synced = await syncDerivedLayers({ moxfield: moxfieldRef.current, purchases: purchaseCacheRef.current });
+        if (!synced) {
+          setSyncState('done');
+          booted.current = true;
+          return;
+        }
+        const nextTcgplayer = manual.skipTcgplayer ? tcgRef.current : synced.tcgplayer;
+        const note = layerChangeNote(moxfieldRef.current, synced.moxfield, tcgRef.current, nextTcgplayer);
+        moxfieldRef.current = synced.moxfield;
+        tcgRef.current = nextTcgplayer;
+        purchaseCacheRef.current = synced.purchases;
+        setMoxfieldEntries(synced.moxfield);
+        setTcgplayerEntries(nextTcgplayer);
+        setPurchaseCache(synced.purchases);
+        setMoxfieldUpdatedAt(synced.updatedAt);
+        if (note) showToast(note);
+        setSyncState('done');
+        booted.current = true;
+      } catch (error) {
+        setSyncState('done');
+        booted.current = true;
+        if (announceErrors) showToast(error instanceof Error ? error.message : 'Could not sync Moxfield.');
+        else console.warn(error);
+      }
+    })();
+    syncLock.current = run.finally(() => {
+      syncLock.current = null;
+    });
+    return syncLock.current;
   }
 
   async function refreshPrices(source: CollectionEntry[]) {
@@ -137,12 +199,19 @@ export function App() {
       return;
     }
     const byId = new Map(cards.map((card) => [card.id, card]));
-    const updated = entriesRef.current.map((entry) => {
+    const apply = (list: CollectionEntry[]) => list.map((entry) => {
       const card = byId.get(entry.scryfallId);
       return card ? updateEntryFromCard(entry, card) : entry;
     });
-    entriesRef.current = updated;
-    setEntries(updated);
+    const nextManual = apply(manualRef.current);
+    const nextMoxfield = apply(moxfieldRef.current);
+    const nextTcg = apply(tcgRef.current);
+    manualRef.current = nextManual;
+    moxfieldRef.current = nextMoxfield;
+    tcgRef.current = nextTcg;
+    setManualEntries(nextManual);
+    setMoxfieldEntries(nextMoxfield);
+    setTcgplayerEntries(nextTcg);
     setPricesUpdatedAt(Date.now());
     showToast(notFound.length > 0 ? `Prices updated. ${notFound.length} cards were not found.` : 'Prices updated from Scryfall.');
   }
@@ -150,9 +219,9 @@ export function App() {
   async function refreshAll() {
     if (refreshing) return;
     setRefreshing(true);
-    setRefreshLabel('Checking orders…');
+    setRefreshLabel('Syncing Moxfield…');
     try {
-      await syncPurchases(true);
+      await syncLayers(true);
       await refreshPrices(entriesRef.current);
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Could not refresh prices.');
@@ -174,6 +243,9 @@ export function App() {
             Card <span>binder</span>
           </h1>
           <p className="tagline">Your collection, saved in this browser.</p>
+          {moxfieldUpdatedAt && (
+            <p className="sync-line" data-sync={syncState}>Synced from Moxfield · {formatSyncDate(moxfieldUpdatedAt)}</p>
+          )}
         </div>
         <div className="header-actions">
           <button type="button" className="btn" onClick={() => void refreshAll()} disabled={refreshing}>
@@ -187,40 +259,6 @@ export function App() {
 
       <main>
         <AddCard entries={entries} onAdd={addEntry} />
-        {purchaseNotice && (
-          <section className="purchase-banner" aria-label="TCGplayer import">
-            <p>{purchaseNotice.message}</p>
-            {purchaseNotice.skipped.length > 0 && (
-              <>
-                <p className="hint">Skipped {purchaseNotice.skipped.length === 1 ? '1 item' : `${purchaseNotice.skipped.length} items`} that didn’t match a card.</p>
-                <ul>
-                  {purchaseNotice.skipped.slice(0, 6).map((item) => <li key={item}>{item}</li>)}
-                  {purchaseNotice.skipped.length > 6 && <li>And {purchaseNotice.skipped.length - 6} more.</li>}
-                </ul>
-              </>
-            )}
-            <div className="row-actions">
-              {purchaseNotice.deltas.length > 0 && (
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => {
-                    const undone = applyQuantityUndo(entriesRef.current, purchaseNotice.deltas);
-                    entriesRef.current = undone;
-                    setEntries(undone);
-                    setPurchaseNotice(null);
-                    showToast('Undid the TCGplayer import. Those orders stay marked so they are not added again.');
-                  }}
-                >
-                  Undo
-                </button>
-              )}
-              <button type="button" className="btn ghost" onClick={() => setPurchaseNotice(null)}>
-                Dismiss
-              </button>
-            </div>
-          </section>
-        )}
         <Stats
           entries={entries}
           pricesUpdatedAt={pricesUpdatedAt}
@@ -274,13 +312,19 @@ export function App() {
           pricesUpdatedAt={pricesUpdatedAt}
           onClose={() => setBackupOpen(false)}
           onClear={() => {
-            setEntries([]);
+            manualRef.current = [];
+            setManualEntries([]);
             setDetailId(null);
             setFilters(EMPTY_FILTERS);
-            showToast('Collection cleared.');
+            showToast('Cards you added on this device were cleared. Moxfield stays in sync.');
           }}
           onApply={(incoming, mode, nextPrices) => {
-            setEntries((current) => (mode === 'replace' ? incoming : mergeIntoCollection(current, incoming)));
+            const manualIncoming = incoming
+              .filter((entry) => (entry.source ?? (entry.fromTcgplayer ? 'tcgplayer' : 'manual')) === 'manual')
+              .map((entry) => ({ ...entry, source: 'manual' as const, id: entryKey(entry.scryfallId, entry.finish) }));
+            const next = mode === 'replace' ? manualIncoming : mergeIntoCollection(manualRef.current, manualIncoming);
+            manualRef.current = next;
+            setManualEntries(next);
             if (mode === 'replace' && nextPrices !== undefined) setPricesUpdatedAt(nextPrices);
             const cards = incoming.reduce((sum, entry) => sum + entry.quantity, 0);
             showToast(mode === 'replace' ? `Imported ${countNoun(cards, 'card')}` : `Added ${countNoun(cards, 'card')}`);

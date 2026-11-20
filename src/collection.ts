@@ -96,7 +96,11 @@ export function matchesColor(identity: string[], selected: string[]): boolean {
 }
 
 export function matchesFilters(entry: CollectionEntry, filters: Filters): boolean {
-  if (filters.tcgplayer && !entry.fromTcgplayer) return false;
+  if (filters.moxfield || filters.tcgplayer) {
+    const source = entry.source ?? (entry.fromTcgplayer ? 'tcgplayer' : 'manual');
+    const selected = (filters.moxfield && source === 'moxfield') || (filters.tcgplayer && source === 'tcgplayer');
+    if (!selected) return false;
+  }
   if (!matchesColor(entry.colorIdentity, filters.colors)) return false;
   if (filters.types.length > 0) {
     const types = cardTypes(entry.typeLine);

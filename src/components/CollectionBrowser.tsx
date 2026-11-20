@@ -49,7 +49,7 @@ export function CollectionBrowser({
     return base;
   }, [entries]);
   const visible = useMemo(() => sortEntries(filterEntries(entries, filters), sort), [entries, filters, sort]);
-  const facetCount = filters.colors.length + filters.types.length + filters.rarities.length + (filters.set ? 1 : 0) + (filters.tcgplayer ? 1 : 0);
+  const facetCount = filters.colors.length + filters.types.length + filters.rarities.length + (filters.set ? 1 : 0) + (filters.tcgplayer ? 1 : 0) + (filters.moxfield ? 1 : 0);
 
   if (entries.length === 0) {
     return (
@@ -149,6 +149,14 @@ export function CollectionBrowser({
             <button
               type="button"
               className="chip"
+              aria-pressed={filters.moxfield}
+              onClick={() => onFilters({ ...filters, moxfield: !filters.moxfield })}
+            >
+              From Moxfield
+            </button>
+            <button
+              type="button"
+              className="chip"
               aria-pressed={filters.tcgplayer}
               onClick={() => onFilters({ ...filters, tcgplayer: !filters.tcgplayer })}
             >
@@ -171,7 +179,7 @@ export function CollectionBrowser({
           <button
             type="button"
             className="btn ghost"
-            onClick={() => onFilters({ ...filters, colors: [], types: [], rarities: [], set: '', tcgplayer: false })}
+            onClick={() => onFilters({ ...filters, colors: [], types: [], rarities: [], set: '', tcgplayer: false, moxfield: false })}
           >
             Clear filters
           </button>
@@ -200,16 +208,23 @@ export function CollectionBrowser({
                   <span>{entry.set.toUpperCase()}</span>
                   <span className={rarityClass(entry.rarity)}>{rarityLabel(entry.rarity)}</span>
                   {entry.finish !== 'nonfoil' && <span className="finish-tag">{entry.finish === 'foil' ? 'Foil' : 'Etched'}</span>}
-                  {entry.fromTcgplayer && <span className="tcg-tag">TCGplayer</span>}
+                  {entry.source === 'moxfield' && <span className="mox-tag">Moxfield</span>}
+                  {(entry.source === 'tcgplayer' || entry.fromTcgplayer) && entry.source !== 'moxfield' && <span className="tcg-tag">TCGplayer</span>}
                 </span>
                 {entry.condition && <span className="condition">{entry.condition}</span>}
                 <span className="tile-price">{priceLabel(entry)}</span>
               </button>
               <div className="tile-actions">
-                <Quantity value={entry.quantity} onChange={(quantity) => onQuantity(entry.id, quantity)} label={`${entry.name} quantity`} />
-                <button type="button" className="text-btn" onClick={() => onRemove(entry.id)}>
-                  Remove
-                </button>
+                {entry.source === 'manual' || !entry.source ? (
+                  <>
+                    <Quantity value={entry.quantity} onChange={(quantity) => onQuantity(entry.id, quantity)} label={`${entry.name} quantity`} />
+                    <button type="button" className="text-btn" onClick={() => onRemove(entry.id)}>
+                      Remove
+                    </button>
+                  </>
+                ) : (
+                  <span className="qty-readout">×{entry.quantity}</span>
+                )}
               </div>
             </article>
           ))}
@@ -233,15 +248,22 @@ export function CollectionBrowser({
                   <span className={rarityClass(entry.rarity)}>{rarityLabel(entry.rarity)}</span>
                   {entry.finish !== 'nonfoil' ? ` · ${entry.finish === 'foil' ? 'Foil' : 'Etched'}` : ''}
                   {entry.condition ? ` · ${entry.condition}` : ''}
-                  {entry.fromTcgplayer ? ' · TCGplayer' : ''}
+                  {entry.source === 'moxfield' ? ' · Moxfield' : ''}
+                  {entry.source === 'tcgplayer' || (entry.fromTcgplayer && entry.source !== 'moxfield') ? ' · TCGplayer' : ''}
                 </p>
               </div>
               <div className="list-side">
                 <strong>{priceLabel(entry)}</strong>
-                <Quantity value={entry.quantity} onChange={(quantity) => onQuantity(entry.id, quantity)} label={`${entry.name} quantity`} />
-                <button type="button" className="text-btn" onClick={() => onRemove(entry.id)}>
-                  Remove
-                </button>
+                {entry.source === 'manual' || !entry.source ? (
+                  <>
+                    <Quantity value={entry.quantity} onChange={(quantity) => onQuantity(entry.id, quantity)} label={`${entry.name} quantity`} />
+                    <button type="button" className="text-btn" onClick={() => onRemove(entry.id)}>
+                      Remove
+                    </button>
+                  </>
+                ) : (
+                  <span className="qty-readout">×{entry.quantity}</span>
+                )}
               </div>
             </article>
           ))}

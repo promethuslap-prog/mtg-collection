@@ -1,5 +1,5 @@
 import { entryKey, parseMoney, safeImage, safeScryfallUri } from './cards';
-import type { CollectionEntry, Finish } from './types';
+import type { CardSource, CollectionEntry, Finish } from './types';
 
 const CSV_COLUMNS = [
   'name',
@@ -56,8 +56,10 @@ export function sanitizeEntry(value: unknown): CollectionEntry | null {
   if (!Number.isFinite(quantity) || quantity < 1) return null;
   const scryfallId = entry.scryfallId.trim();
   const imageBack = safeImage(typeof entry.imageBack === 'string' ? entry.imageBack : undefined);
+  const source: CardSource = entry.source === 'moxfield' || entry.source === 'tcgplayer' || entry.source === 'manual' ? entry.source : 'manual';
+  const baseId = entryKey(scryfallId, finish);
   return {
-    id: entryKey(scryfallId, finish),
+    id: source === 'manual' ? baseId : `${source}:${baseId}`,
     scryfallId,
     oracleId: typeof entry.oracleId === 'string' ? entry.oracleId : '',
     name: entry.name.trim(),
@@ -79,6 +81,7 @@ export function sanitizeEntry(value: unknown): CollectionEntry | null {
     ...(typeof entry.artist === 'string' && entry.artist ? { artist: entry.artist } : {}),
     ...(typeof entry.condition === 'string' && entry.condition.trim() ? { condition: entry.condition.trim() } : {}),
     ...(entry.fromTcgplayer === true ? { fromTcgplayer: true } : {}),
+    source,
   };
 }
 

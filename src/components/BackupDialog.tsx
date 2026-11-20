@@ -197,7 +197,7 @@ export function BackupDialog({ entries, pricesUpdatedAt, onClose, onApply, onCle
 
         <section>
           <h3>Clear this browser</h3>
-          <p className="hint">This deletes the cards saved on this device. Export a backup first if you want to keep them.</p>
+          <p className="hint">This deletes cards you added on this device. Cards synced from Moxfield, and TCGplayer cards that are not in Moxfield, stay.</p>
           {clearArmed ? (
             <div className="row-actions">
               <button
@@ -216,7 +216,7 @@ export function BackupDialog({ entries, pricesUpdatedAt, onClose, onApply, onCle
               </button>
             </div>
           ) : (
-            <button type="button" className="btn danger" disabled={entries.length === 0} onClick={() => setClearArmed(true)}>
+            <button type="button" className="btn danger" disabled={!entries.some((entry) => !entry.source || entry.source === 'manual')} onClick={() => setClearArmed(true)}>
               Clear collection
             </button>
           )}

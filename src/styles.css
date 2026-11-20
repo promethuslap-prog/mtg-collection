@@ -113,6 +113,12 @@ main,
 
 .tagline { margin: 10px 0 0; }
 
+.sync-line {
+  margin: 8px 0 0;
+  color: var(--gold);
+  font-size: 0.95rem;
+}
+
 .header-actions, .row-actions, .view-toggle {
   display: flex;
   flex-wrap: wrap;
@@ -438,7 +444,7 @@ fieldset {
   background: transparent;
 }
 
-.finish-tag, .tcg-tag {
+.finish-tag, .tcg-tag, .mox-tag {
   border: 1px solid var(--gold);
   color: var(--gold);
   border-radius: 999px;
@@ -446,7 +452,11 @@ fieldset {
   font-size: 0.78rem;
 }
 
-.condition { color: var(--muted); font-size: 0.88rem; }
+.mox-tag { border-color: #8fce7a; color: #b7e4b0; }
+
+.condition, .qty-readout { color: var(--muted); font-size: 0.88rem; }
+
+.qty-readout { min-height: 44px; display: inline-flex; align-items: center; font-variant-numeric: tabular-nums; }
 
 .purchase-banner {
   margin-top: 18px;

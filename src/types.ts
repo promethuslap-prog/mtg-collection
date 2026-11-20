@@ -1,5 +1,7 @@
 export type Finish = 'nonfoil' | 'foil' | 'etched';
 
+export type CardSource = 'manual' | 'moxfield' | 'tcgplayer';
+
 export type ViewMode = 'grid' | 'list';
 
 export type SortKey =
@@ -33,6 +35,7 @@ export interface CollectionEntry {
   artist?: string;
   condition?: string;
   fromTcgplayer?: boolean;
+  source?: CardSource;
 }
 
 export interface Filters {
@@ -42,6 +45,7 @@ export interface Filters {
   rarities: string[];
   set: string;
   tcgplayer: boolean;
+  moxfield: boolean;
 }
 
 export const EMPTY_FILTERS: Filters = {
@@ -51,4 +55,5 @@ export const EMPTY_FILTERS: Filters = {
   rarities: [],
   set: '',
   tcgplayer: false,
+  moxfield: false,
 };
