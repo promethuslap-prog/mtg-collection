@@ -223,6 +223,26 @@ main,
 .check { display: flex; align-items: center; gap: 8px; min-height: 44px; }
 .check input { width: auto; }
 .row-actions .file-btn { margin-top: 0; }
+.deck-builder { margin-top: 18px; }
+.commander-rank { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.commander-pick {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: rgba(24, 35, 30, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  color: inherit;
+  padding: 8px;
+  min-height: 44px;
+}
+.commander-pick img { width: 64px; border-radius: 8px; }
+.commander-pick[aria-pressed="true"] { border-color: var(--gold); }
+.summary-line { font-family: var(--display); font-size: clamp(1.4rem, 3vw, 2rem); margin: 8px 0; }
+.pip-btn[aria-pressed="true"] { border-color: var(--gold); }
+.build-result { display: grid; gap: 12px; }
 .paste-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
 .budget { max-width: 120px; }
 .issue-list li { color: #f0b4a4; padding: 4px 0; }

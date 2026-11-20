@@ -19,6 +19,8 @@ export interface ScryfallCard {
     image_uris?: ScryfallImageUris;
     artist?: string;
     type_line?: string;
+    oracle_text?: string;
+    mana_cost?: string;
   }>;
   mana_cost?: string;
   cmc?: number;

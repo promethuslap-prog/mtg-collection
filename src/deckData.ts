@@ -74,7 +74,7 @@ export function rememberPrinting(card: ScryfallCard): CachedPrinting {
     cmc: card.cmc ?? 0,
     typeLine: card.type_line ?? '',
     colorIdentity: card.color_identity ?? [],
-    oracleText: (card.oracle_text ?? '').slice(0, 500),
+    oracleText: (card.oracle_text ?? card.card_faces?.map((face) => face.oracle_text).filter(Boolean).join('\n') ?? '').slice(0, 500),
     keywords: card.keywords ?? [],
     legalityCommander: card.legalities?.commander ?? '',
     legalityStandard: card.legalities?.standard ?? '',
@@ -263,21 +263,94 @@ export function printingById(id: string): CachedPrinting | undefined {
   return memoryCards.get(id);
 }
 
-export async function enrichCollection(ids: string[]): Promise<void> {
+export async function enrichCollection(ids: string[], onProgress?: (done: number, total: number) => void): Promise<void> {
   ensureCache();
   const missing = ids.filter((id) => {
     if (!id) return false;
     const cached = memoryCards.get(id);
     return !cached || !cached.legalities || Object.keys(cached.legalities).length === 0;
   });
-  if (!missing.length) return;
+  if (!missing.length) {
+    onProgress?.(ids.length, ids.length);
+    return;
+  }
   try {
-    const { cards } = await fetchCollection(missing.map((id) => ({ id })));
+    const { cards } = await fetchCollection(missing.map((id) => ({ id })), onProgress);
     for (const card of cards) rememberPrinting(card);
     writeCache();
+    await persistPrintingCache();
   } catch (error) {
     console.warn(error);
   }
+}
+
+const CACHE_IDB_KEY = 'deck-card-cache';
+
+export async function hydratePrintingCache(): Promise<void> {
+  ensureCache();
+  if (typeof indexedDB === 'undefined') return;
+  try {
+    const json = await idbGet(CACHE_IDB_KEY);
+    if (!json) return;
+    const list = JSON.parse(json) as CachedPrinting[];
+    if (!Array.isArray(list)) return;
+    for (const card of list) {
+      if (!card?.id || !card.name) continue;
+      memoryCards.set(card.id, card);
+      if (card.set && card.collectorNumber) memoryCards.set(`${card.set}|${card.collectorNumber.toLowerCase()}`, card);
+      memoryCards.set(normalizeName(card.name), card);
+    }
+  } catch {
+    /* ignore a broken cache */
+  }
+}
+
+export async function persistPrintingCache(): Promise<void> {
+  if (typeof indexedDB === 'undefined') return;
+  const byId = new Map<string, CachedPrinting>();
+  for (const card of memoryCards.values()) {
+    if (card?.id && card.name) byId.set(card.id, card);
+  }
+  try {
+    await idbSet(CACHE_IDB_KEY, JSON.stringify([...byId.values()]));
+  } catch {
+    /* quota or private mode */
+  }
+}
+
+function idbOpen(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('mtg-collection', 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+    };
+    request.onerror = () => reject(request.error ?? new Error('Could not open card cache.'));
+    request.onsuccess = () => resolve(request.result);
+  });
+}
+
+async function idbSet(key: string, json: string): Promise<void> {
+  const db = await idbOpen();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction('kv', 'readwrite');
+    tx.objectStore('kv').put(json, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error ?? new Error('Could not save the card cache.'));
+  });
+  db.close();
+}
+
+async function idbGet(key: string): Promise<string | null> {
+  const db = await idbOpen();
+  const value = await new Promise<string | null>((resolve, reject) => {
+    const tx = db.transaction('kv', 'readonly');
+    const request = tx.objectStore('kv').get(key);
+    request.onsuccess = () => resolve(typeof request.result === 'string' ? request.result : null);
+    request.onerror = () => reject(request.error ?? new Error('Could not read the card cache.'));
+  });
+  db.close();
+  return value;
 }
 
 export function deckCardQuery(text: string, format: DeckFormat, identity: string[], restrict: boolean): string {
