@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { ScryfallCard } from '../src/cards';
+import { loadGameChangers } from '../src/brackets';
 import { buildDeck, rankOwnedCommanders, suggestColors, type PoolCard } from '../src/deckBuild';
 import { inferRoles } from '../src/deckAnalyze';
 import { parseMoxfieldFile } from '../src/moxfield';
@@ -97,7 +98,36 @@ describe.skipIf(!live)('live collection build', () => {
     });
     expect(casual.cards.reduce((sum, card) => sum + card.qty, 0)).toBe(60);
 
+    const gameChangers = await loadGameChangers();
+    const shared = {
+      format: 'commander' as const,
+      commander: krenko!,
+      colors: krenko!.colorIdentity,
+      theme: 'goblins',
+      onlyOwned: true,
+      buyLimit: 0,
+      allowInOtherDecks: true,
+      seed: 1,
+      gameChangers,
+    };
+    const core = buildDeck(pool, { ...shared, bracket: 2 });
+    const optimized = buildDeck(pool, { ...shared, bracket: 4 });
+    expect(core.cards.reduce((sum, card) => sum + card.qty, 0)).toBe(99);
+    expect(optimized.cards.reduce((sum, card) => sum + card.qty, 0)).toBe(99);
+    expect(core.check?.gameChangers).toEqual([]);
+    const names = (deck: { cards: Array<{ card: { name: string } }> }) => new Set(deck.cards.map((card) => card.card.name));
+    const coreNames = names(core);
+    const optimizedNames = names(optimized);
+    const onlyOptimized = [...optimizedNames].filter((name) => !coreNames.has(name));
+    const onlyCore = [...coreNames].filter((name) => !optimizedNames.has(name));
+
     writeFileSync('/tmp/build-report.json', JSON.stringify({
+      brackets: {
+        core: { summary: core.summary, gameChangers: core.check?.gameChangers, skipped: core.skipped, tutors: core.check?.tutors, fastMana: core.check?.fastMana },
+        optimized: { summary: optimized.summary, gameChangers: optimized.check?.gameChangers, tutors: optimized.check?.tutors, fastMana: optimized.check?.fastMana },
+        onlyOptimized,
+        onlyCore,
+      },
       ranked: ranked.slice(0, 8).map((item) => ({ name: item.card.name, playable: item.playable, synergy: item.synergy })),
       krenkoRank: ranked.findIndex((item) => item.card.name === 'Krenko, Mob Boss'),
       krenko: { summary: krenkoDeck.summary, roles: krenkoDeck.roles.map((role) => ({ id: role.id, count: role.count, level: role.level })) },

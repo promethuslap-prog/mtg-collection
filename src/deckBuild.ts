@@ -1,3 +1,4 @@
+import { bracketAdjustment, bracketLabel, detectSignals, reviewCards, skipReason, type BracketId, type BracketReview, type SkipNote } from './brackets';
 import { inferRoles, type RoleId } from './deckAnalyze';
 import { formatSpec } from './deckModel';
 import { normalizeName } from './text';
@@ -24,6 +25,11 @@ export interface PoolCard {
   scryfallUri: string;
   owned: boolean;
   inDecks: string[];
+  gameChanger?: boolean;
+  massLandDenial?: boolean;
+  extraTurn?: boolean;
+  tutor?: boolean;
+  fastMana?: boolean;
 }
 
 export interface BuildRequest {
@@ -36,6 +42,8 @@ export interface BuildRequest {
   allowInOtherDecks: boolean;
   seed: number;
   extras?: PoolCard[];
+  bracket?: BracketId;
+  gameChangers?: Set<string>;
 }
 
 export interface BuiltCard {
@@ -70,6 +78,9 @@ export interface BuiltDeck {
   mainSize: number;
   seed: number;
   toBuy: BuiltCard[];
+  bracket?: BracketId;
+  check?: BracketReview;
+  skipped?: SkipNote[];
 }
 
 export interface RankedCommander {
@@ -129,6 +140,10 @@ export function suggestColors(pool: PoolCard[], format: BuildFormat, theme: stri
 
 export function buildDeck(pool: PoolCard[], request: BuildRequest): BuiltDeck {
   const format = request.format;
+  const bracket = request.bracket ?? 'any';
+  const gameChangers = request.gameChangers ?? new Set<string>();
+  const skipped = new Map<string, string>();
+  const bracketState = { gameChangers: 0, extraTurns: 0, fastMana: 0, names: [] as string[] };
   const spec = formatSpec(format);
   const mainSize = spec.commander ? 99 : 60;
   const commander = request.commander;
@@ -154,6 +169,12 @@ export function buildDeck(pool: PoolCard[], request: BuildRequest): BuiltDeck {
   const unique = [...ownedByName.values()];
   const nonlands = unique.filter((card) => !isLand(card));
   const nonbasics = unique.filter((card) => isLand(card) && !isBasic(card));
+  for (const card of unique) {
+    const seen = view(card);
+    if (!seen.owned) continue;
+    const reason = skipReason(seen, bracket, { gameChangers: 0, extraTurns: 0, fastMana: 0, names: [] });
+    if (reason && (seen.gameChanger || seen.massLandDenial || (seen.extraTurn && reason === 'Extra turn'))) skipped.set(seen.name, reason);
+  }
 
   const initialLands = spec.commander ? 34 : 24;
   let nonlandSlots = mainSize - initialLands;
@@ -170,6 +191,33 @@ export function buildDeck(pool: PoolCard[], request: BuildRequest): BuiltDeck {
     return chosen.reduce((sum, card) => sum + card.qty, 0);
   }
 
+  function view(card: PoolCard): PoolCard {
+    const signals = detectSignals(card, gameChangers);
+    return {
+      ...card,
+      gameChanger: card.gameChanger ?? signals.gameChanger,
+      massLandDenial: card.massLandDenial ?? signals.massLandDenial,
+      extraTurn: card.extraTurn ?? signals.extraTurn,
+      tutor: card.tutor ?? signals.tutor,
+      fastMana: card.fastMana ?? signals.fastMana,
+    };
+  }
+
+  function consider(options: Array<{ card: PoolCard; score: number }>): { card: PoolCard; score: number } | null {
+    const open: Array<{ card: PoolCard; score: number }> = [];
+    for (const option of options) {
+      const card = view(option.card);
+      const reason = skipReason(card, bracket, bracketState);
+      if (reason) {
+        if (card.owned) skipped.set(card.name, reason);
+        continue;
+      }
+      open.push({ card, score: option.score + bracketAdjustment(card, bracket) });
+    }
+    open.sort((a, b) => b.score - a.score || a.card.name.localeCompare(b.card.name));
+    return pickNear(open, rng);
+  }
+
   function take(card: PoolCard, role: RoleId | 'threat') {
     if (!card.owned) {
       if (buys >= buyLimit) return false;
@@ -182,6 +230,10 @@ export function buildDeck(pool: PoolCard[], request: BuildRequest): BuiltDeck {
     used.add(normalizeName(card.name));
     for (const item of card.roles) counts[item] += qty;
     curve[Math.min(6, Math.floor(card.cmc))] += qty;
+    if (card.gameChanger) bracketState.gameChangers += 1;
+    if (card.extraTurn) bracketState.extraTurns += 1;
+    if (card.fastMana) bracketState.fastMana += qty;
+    bracketState.names.push(card.name);
     return true;
   }
 
@@ -197,12 +249,12 @@ export function buildDeck(pool: PoolCard[], request: BuildRequest): BuiltDeck {
   for (const role of ['ramp', 'draw', 'removal', 'wipe'] as const) {
     while (counts[role] < aims[role] && slots() < nonlandSlots) {
       const options = candidates(role).filter((item) => item.card.roles.includes(role));
-      const next = pickNear(options, rng);
+      const next = consider(options);
       if (!next || !take(next.card, role)) break;
     }
   }
   while (slots() < nonlandSlots) {
-    const next = pickNear(candidates('threat'), rng);
+    const next = consider(candidates('threat'));
     if (!next || !take(next.card, primaryRole(next.card))) break;
   }
 
@@ -212,7 +264,7 @@ export function buildDeck(pool: PoolCard[], request: BuildRequest): BuiltDeck {
   nonlandSlots = wantedSpells;
   while (slots() > wantedSpells) dropOne(chosen, used, counts, curve);
   while (slots() < wantedSpells) {
-    const next = pickNear(candidates('threat'), rng);
+    const next = consider(candidates('threat'));
     if (!next || !take(next.card, primaryRole(next.card))) break;
   }
 
@@ -228,20 +280,29 @@ export function buildDeck(pool: PoolCard[], request: BuildRequest): BuiltDeck {
   let nonbasicTaken = 0;
   for (const option of landOptions) {
     if (nonbasicTaken >= nonbasicRoom) break;
-    const produced = producedColors(option.card);
+    const card = view(option.card);
+    const reason = skipReason(card, bracket, bracketState);
+    if (reason) {
+      if (card.owned) skipped.set(card.name, reason);
+      continue;
+    }
+    const produced = producedColors(card);
     const onColor = produced.filter((color) => identity.includes(color));
     const utilityLand = onColor.length === 0;
     if (utilityLand) {
-      if (utility >= 3 || option.card.colorIdentity.some((color) => !identity.includes(color))) continue;
+      if (utility >= 3 || card.colorIdentity.some((color) => !identity.includes(color))) continue;
       utility += 1;
     }
-    if (!option.card.owned) {
+    if (!card.owned) {
       if (buys >= buyLimit) continue;
       buys += 1;
     }
-    chosen.push(toBuilt(option.card, 1, 'land', landReason(option.card, identity)));
-    used.add(normalizeName(option.card.name));
+    chosen.push(toBuilt(card, 1, 'land', landReason(card, identity)));
+    used.add(normalizeName(card.name));
     counts.land += 1;
+    if (card.gameChanger) bracketState.gameChangers += 1;
+    if (card.fastMana) bracketState.fastMana += 1;
+    bracketState.names.push(card.name);
     nonbasicTaken += 1;
   }
 
@@ -257,7 +318,21 @@ export function buildDeck(pool: PoolCard[], request: BuildRequest): BuiltDeck {
   }
 
   const trimmed = fitExact(chosen, mainSize, identity, pips, pool);
-  return present(trimmed, commander, format, identity, request.seed, request.theme);
+  const built = present(trimmed, commander, format, identity, request.seed, request.theme);
+  const reviewed = reviewCards(
+    [...(commander ? [{ name: commander.name, typeLine: commander.typeLine, oracleText: commander.oracleText, cmc: commander.cmc }] : []),
+      ...trimmed.map((card) => ({ name: card.card.name, typeLine: card.card.typeLine, oracleText: card.card.oracleText, cmc: card.card.cmc, gameChanger: card.card.gameChanger }))],
+    gameChangers,
+  );
+  if (commander?.gameChanger && (bracket === 1 || bracket === 2)) {
+    reviewed.notes.push(`${commander.name} is a Game Changer, so this deck cannot stay in ${bracketLabel(bracket)}.`);
+  }
+  return {
+    ...built,
+    bracket,
+    check: reviewed,
+    skipped: [...skipped.entries()].map(([name, reason]) => ({ name, reason })),
+  };
 }
 
 export function swapBuiltCard(built: BuiltDeck, name: string, pool: PoolCard[], request: BuildRequest): BuiltDeck {
@@ -270,7 +345,22 @@ export function swapBuiltCard(built: BuiltDeck, name: string, pool: PoolCard[], 
     if (used.has(normalizeName(card.name)) || isBasic(card) || isLand(card) !== (target.role === 'land')) return false;
     if (!card.owned && request.onlyOwned) return false;
     if (!request.allowInOtherDecks && card.inDecks.length > 0) return false;
-    return fits(card, identity, built.format);
+    if (!fits(card, identity, built.format)) return false;
+    const signals = detectSignals(card, request.gameChangers ?? new Set());
+    const marked = {
+      ...card,
+      gameChanger: card.gameChanger ?? signals.gameChanger,
+      massLandDenial: card.massLandDenial ?? signals.massLandDenial,
+      extraTurn: card.extraTurn ?? signals.extraTurn,
+      fastMana: card.fastMana ?? signals.fastMana,
+    };
+    const names = built.cards.filter((item) => normalizeName(item.card.name) !== normalizeName(name)).map((item) => item.card.name);
+    return skipReason(marked, request.bracket, {
+      gameChangers: names.filter((item) => pool.find((entry) => entry.name === item)?.gameChanger).length,
+      extraTurns: 0,
+      fastMana: 0,
+      names,
+    }) == null;
   });
   const sameRole = options.filter((card) => target.role === 'threat' || target.role === 'land' || card.roles.includes(target.role));
   const ranked = (sameRole.length ? sameRole : options)

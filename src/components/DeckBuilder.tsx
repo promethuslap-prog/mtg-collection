@@ -27,6 +27,7 @@ import { downloadText } from '../io';
 import { normalizeName } from '../text';
 import { createUserDeck, toMoxfieldText } from '../userDecks';
 import type { CollectionEntry } from '../types';
+import { BRACKETS, bracketLabel, loadGameChangers, type BracketId } from '../brackets';
 import { Pips } from './bits';
 
 const FORMATS: Array<{ id: BuildFormat; label: string }> = [
@@ -60,6 +61,7 @@ export function DeckBuilder({ entries, decks, onClose, onSave }: DeckBuilderProp
   const [onlyOwned, setOnlyOwned] = useState(true);
   const [buyLimit, setBuyLimit] = useState(5);
   const [allowInOtherDecks, setAllowInOtherDecks] = useState(true);
+  const [bracket, setBracket] = useState<BracketId>(2);
   const [pool, setPool] = useState<PoolCard[]>([]);
   const [ranked, setRanked] = useState<RankedCommander[]>([]);
   const [commander, setCommander] = useState<PoolCard | null>(null);
@@ -128,6 +130,11 @@ export function DeckBuilder({ entries, decks, onClose, onSave }: DeckBuilderProp
       return;
     }
     setStatus('Building from your collection…');
+    const gameChangers = format === 'commander' && bracket !== 'any' ? await loadGameChangers() : new Set<string>();
+    if (format === 'commander' && bracket !== 'any' && gameChangers.size === 0) {
+      setStatus('Could not load the Game Changers list from Scryfall. Try again in a moment.');
+      return;
+    }
     let extras: PoolCard[] = [];
     if (!onlyOwned && buyLimit > 0) {
       try {
@@ -152,6 +159,8 @@ export function DeckBuilder({ entries, decks, onClose, onSave }: DeckBuilderProp
       allowInOtherDecks,
       seed,
       extras,
+      bracket: format === 'commander' ? bracket : 'any',
+      gameChangers,
     };
     const built = buildDeck(pool, nextRequest);
     setRequest(nextRequest);
@@ -213,6 +222,15 @@ export function DeckBuilder({ entries, decks, onClose, onSave }: DeckBuilderProp
                 )}
               </div>
               {commander && <p className="hint">Commander: {commander.name}{commander.owned ? '' : ' · not in your collection'}</p>}
+              <fieldset className="bracket-picker">
+                <legend>Commander bracket</legend>
+                {BRACKETS.map((item) => (
+                  <label key={String(item.id)} className="check">
+                    <input type="radio" name="bracket" value={String(item.id)} checked={bracket === item.id} onChange={() => setBracket(item.id)} />
+                    <span><strong>{item.label}</strong> — {item.blurb}</span>
+                  </label>
+                ))}
+              </fieldset>
             </>
           ) : (
             <>
@@ -273,8 +291,29 @@ function BuilderResult({
   return (
     <div className="build-result" data-build-result={result.name}>
       <p className="summary-line" data-build-summary={result.summary}>{result.summary}</p>
+      {result.bracket && result.bracket !== 'any' && (
+        <p className="hint" data-bracket={result.bracket}>Building at {bracketLabel(result.bracket)}</p>
+      )}
       {result.commander && (
         <p className="hint">Commander: {result.commander.name}{result.commanderOwned ? ' · owned' : ' · to buy'}</p>
+      )}
+      {result.check && (
+        <section className="bracket-check" aria-label="Bracket check">
+          <h3>Bracket check · estimated {result.check.label}</h3>
+          <p data-game-changers={result.check.gameChangers.join('|')}>
+            Game Changers ({result.check.gameChangers.length}){result.check.gameChangers.length ? `: ${result.check.gameChangers.join(', ')}` : ''}
+          </p>
+          <p>{result.check.massLandDenial.length ? `Mass land denial: ${result.check.massLandDenial.join(', ')}` : 'No mass land denial'}</p>
+          <p>{result.check.extraTurns.length ? `Extra turns: ${result.check.extraTurns.join(', ')}` : 'No extra turns'}</p>
+          <p>{result.check.tutors.length ? `Tutors: ${result.check.tutors.join(', ')}` : 'No tutors'}</p>
+          <p>{result.check.combos.length ? `Two-card combos: ${result.check.combos.map((combo) => `${combo.a} + ${combo.b}`).join('; ')}` : 'No two-card combos'}</p>
+          {result.check.notes.map((note) => <p key={note}>{note}</p>)}
+        </section>
+      )}
+      {result.skipped && result.skipped.length > 0 && (
+        <ul className="issue-list">
+          {result.skipped.slice(0, 8).map((skip) => <li key={skip.name}>Skipped {skip.name}: {skip.reason}</li>)}
+        </ul>
       )}
       <div className="row-actions">
         <button type="button" className="btn primary" onClick={onSave}>Save as new deck</button>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { loadGameChangers, reviewCards, type BracketReview } from '../brackets';
 import { analyzeDeck, combinedIdentity, type DeckReport, type KnownCard } from '../deckAnalyze';
 import {
   enrichCollection,
@@ -246,6 +247,7 @@ function DeckPage({
   const [status, setStatus] = useState('Reading the deck…');
   const [panel, setPanel] = useState<'add' | 'buy' | 'cut' | 'swap'>('add');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [bracketReview, setBracketReview] = useState<BracketReview | null>(null);
   const local = isLocalDeck(deck);
 
   useEffect(() => {
@@ -279,6 +281,16 @@ function DeckPage({
       };
       await enrichCollection(entries.map((entry) => entry.scryfallId));
       if (cancel) return;
+      if (deck.format === 'commander') {
+        const changers = await loadGameChangers();
+        const knownCards = paired.filter((item) => item.printing).map((item) => ({
+          name: item.printing!.name,
+          typeLine: item.printing!.typeLine,
+          oracleText: item.printing!.oracleText,
+          cmc: item.printing!.cmc,
+        }));
+        if (!cancel) setBracketReview(reviewCards(knownCards, changers));
+      } else if (!cancel) setBracketReview(null);
       setReport(build([]));
       setStatus('');
       const oracleIds = [
@@ -341,6 +353,16 @@ function DeckPage({
           {!local && <p className="hint">This deck comes from Moxfield and stays read-only here. Edit it on Moxfield, or duplicate it to change a copy on this device.</p>}
           {deck.url && <p><a href={deck.url} target="_blank" rel="noreferrer">View on Moxfield</a></p>}
           {report && !editing && <p className={`health health-${report.health >= 75 ? 'ok' : 'low'}`}>Health {report.health} · {report.cardCount}/{report.target} cards · avg MV {report.averageMv.toFixed(2)}</p>}
+          {deck.format === 'commander' && bracketReview && !editing && (
+            <p className="hint" data-estimated-bracket={bracketReview.estimated}>
+              Estimated bracket: {bracketReview.label}. {bracketReview.gameChangers.length} Game Changers
+              {bracketReview.gameChangers.length ? `: ${bracketReview.gameChangers.slice(0, 6).join(', ')}` : ''}.
+              {bracketReview.massLandDenial.length ? ` Mass land denial: ${bracketReview.massLandDenial.join(', ')}.` : ' No mass land denial.'}
+              {` ${bracketReview.extraTurns.length} extra-turn ${bracketReview.extraTurns.length === 1 ? 'card' : 'cards'}.`}
+              {` ${bracketReview.tutors.length} ${bracketReview.tutors.length === 1 ? 'tutor' : 'tutors'}.`}
+              {bracketReview.combos.length ? ` Combos: ${bracketReview.combos.map((combo) => `${combo.a} + ${combo.b}`).join('; ')}.` : ' No two-card combos.'}
+            </p>
+          )}
         </div>
       </header>
       {local && !editing && <DeckExport deck={deck} />}

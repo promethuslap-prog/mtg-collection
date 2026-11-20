@@ -37,7 +37,7 @@ Moxfield is the main list. `public/moxfield.json` is served at:
 
 https://promethuslap-prog.github.io/mtg-collection/moxfield.json
 
-`public/decks.json` is the Moxfield deck list, served at https://promethuslap-prog.github.io/mtg-collection/decks.json. Those decks stay read-only. Decks you create, import, duplicate, or build from the collection are saved in this browser, with a JSON backup and a Moxfield text export (`1 Sol Ring (C21) 263`). `public/purchases.json` is served at:
+`public/decks.json` is the Moxfield deck list, served at https://promethuslap-prog.github.io/mtg-collection/decks.json. Those decks stay read-only. Decks you create, import, duplicate, or build from the collection are saved in this browser, with a JSON backup and a Moxfield text export (`1 Sol Ring (C21) 263`). Commander builds can follow Wizards’ Commander Brackets, using the live Scryfall Game Changers list. `public/purchases.json` is served at:
 
 https://promethuslap-prog.github.io/mtg-collection/purchases.json
 

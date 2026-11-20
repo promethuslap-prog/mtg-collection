@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildDeck, canBeCommander, rankOwnedCommanders, suggestColors, swapBuiltCard, type PoolCard } from './deckBuild';
+import { reviewCards } from './brackets';
 
 function card(partial: Partial<PoolCard> & { name: string }): PoolCard {
   const typeLine = partial.typeLine ?? 'Creature — Goblin';
@@ -23,6 +24,11 @@ function card(partial: Partial<PoolCard> & { name: string }): PoolCard {
     scryfallUri: '',
     owned: partial.owned ?? true,
     inDecks: partial.inDecks ?? [],
+    gameChanger: partial.gameChanger,
+    massLandDenial: partial.massLandDenial,
+    extraTurn: partial.extraTurn,
+    tutor: partial.tutor,
+    fastMana: partial.fastMana,
   };
 }
 
@@ -162,5 +168,47 @@ describe('deck builder', () => {
     const swapped = swapBuiltCard(built, spell!.card.name, pool, request);
     expect(swapped.cards.reduce((sum, card) => sum + card.qty, 0)).toBe(99);
     expect(swapped.cards.some((card) => card.card.name === spell!.card.name)).toBe(false);
+  });
+
+  it('keeps Game Changers out of Bracket 2 and allows them in Bracket 4', () => {
+    const ring = card({
+      name: 'The One Ring',
+      colorIdentity: [],
+      manaCost: '{4}',
+      cmc: 4,
+      typeLine: 'Legendary Artifact',
+      oracleText: 'Indestructible. Draw a card.',
+      roles: ['draw'],
+      gameChanger: true,
+      edhrecRank: 10,
+    });
+    const kiki = card({ name: 'Kiki-Jiki, Mirror Breaker', typeLine: 'Legendary Creature — Goblin Shaman', oracleText: 'Create a token copy.' });
+    const conscripts = card({ name: 'Zealous Conscripts', typeLine: 'Creature — Human Warrior', oracleText: 'Gain control of target permanent.' });
+    const pool = [...redPool(), ring, kiki, conscripts];
+    const base = {
+      format: 'commander' as const,
+      commander: redPool()[0],
+      colors: ['R'],
+      theme: 'goblins',
+      onlyOwned: true,
+      buyLimit: 0,
+      allowInOtherDecks: true,
+      seed: 1,
+    };
+    const core = buildDeck(pool, { ...base, bracket: 2 });
+    const optimized = buildDeck(pool, { ...base, bracket: 4 });
+    expect(core.cards.some((item) => item.card.name === 'The One Ring')).toBe(false);
+    expect(core.check?.gameChangers).toEqual([]);
+    expect(core.skipped?.some((item) => item.name === 'The One Ring' && item.reason === 'Game Changer')).toBe(true);
+    expect(optimized.cards.some((item) => item.card.name === 'The One Ring')).toBe(true);
+    const comboNames = core.cards.map((item) => item.card.name);
+    expect(comboNames.includes('Kiki-Jiki, Mirror Breaker') && comboNames.includes('Zealous Conscripts')).toBe(false);
+    const review = reviewCards([
+      { name: 'The One Ring', typeLine: 'Legendary Artifact', oracleText: '', cmc: 4, gameChanger: true },
+      { name: 'Mana Vault', typeLine: 'Artifact', oracleText: '{T}: Add {C}{C}{C}.', cmc: 1, gameChanger: true },
+      { name: 'Demonic Tutor', typeLine: 'Sorcery', oracleText: 'Search your library for a card.', cmc: 2, gameChanger: true },
+      { name: 'Gamble', typeLine: 'Sorcery', oracleText: 'Search your library for a card.', cmc: 1, gameChanger: true },
+    ], new Set());
+    expect(review.estimated).toBe(4);
   });
 });
