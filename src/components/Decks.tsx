@@ -51,6 +51,7 @@ export function DecksSection({ entries }: DecksProps) {
   const [importing, setImporting] = useState(false);
   const [restore, setRestore] = useState<DeckRecord[] | null>(null);
   const [building, setBuilding] = useState(false);
+  const [autoBest, setAutoBest] = useState(false);
 
   useEffect(() => {
     void loadDeckFile().then((file) => {
@@ -111,8 +112,9 @@ export function DecksSection({ entries }: DecksProps) {
         <DeckBuilder
           entries={entries}
           decks={all}
-          onClose={() => setBuilding(false)}
-          onSave={(deck) => { setBuilding(false); addLocal(deck); }}
+          autoStart={autoBest}
+          onClose={() => { setBuilding(false); setAutoBest(false); }}
+          onSave={(deck) => { setBuilding(false); setAutoBest(false); addLocal(deck); }}
         />
       ) : open ? (
         <DeckPage
@@ -142,7 +144,8 @@ export function DecksSection({ entries }: DecksProps) {
             </p>
           </div>
           <div className="row-actions">
-            <button type="button" className="btn primary" onClick={() => setBuilding(true)}>Build a deck for me</button>
+            <button type="button" className="btn primary best-btn" onClick={() => { setAutoBest(true); setBuilding(true); }}>Build my best deck</button>
+            <button type="button" className="btn" onClick={() => { setAutoBest(false); setBuilding(true); }}>Build a deck for me</button>
             <button type="button" className="btn" onClick={() => setCreating(true)}>New deck</button>
             <button type="button" className="btn" onClick={() => setImporting(true)}>Import</button>
             <button type="button" className="btn" onClick={() => downloadText(`mtg-decks-${new Date().toISOString().slice(0, 10)}.json`, serializeUserDecks(userDecks), 'application/json')}>Back up my decks</button>

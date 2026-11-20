@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   buildDeck,
+  findBestCommandersAsync,
   rankOwnedCommanders,
   rolesForCard,
   suggestColors,
   swapBuiltCard,
   type BuildFormat,
   type BuildRequest,
+  type BestSearch,
   type BuiltDeck,
   type PoolCard,
   type RankedCommander,
@@ -52,9 +54,10 @@ interface DeckBuilderProps {
   decks: DeckRecord[];
   onClose: () => void;
   onSave: (deck: DeckRecord) => void;
+  autoStart?: boolean;
 }
 
-export function DeckBuilder({ entries, decks, onClose, onSave }: DeckBuilderProps) {
+export function DeckBuilder({ entries, decks, onClose, onSave, autoStart = false }: DeckBuilderProps) {
   const [format, setFormat] = useState<BuildFormat>('commander');
   const [colors, setColors] = useState<string[]>([]);
   const [suggest, setSuggest] = useState(true);
@@ -67,6 +70,7 @@ export function DeckBuilder({ entries, decks, onClose, onSave }: DeckBuilderProp
   const [ignoreLegality, setIgnoreLegality] = useState(savedCasual.ignoreLegality);
   const [includeUncards, setIncludeUncards] = useState(savedCasual.includeUncards);
   const [pool, setPool] = useState<PoolCard[]>([]);
+  const [poolReady, setPoolReady] = useState(false);
   const [ranked, setRanked] = useState<RankedCommander[]>([]);
   const [commander, setCommander] = useState<PoolCard | null>(null);
   const [query, setQuery] = useState('');
@@ -75,10 +79,15 @@ export function DeckBuilder({ entries, decks, onClose, onSave }: DeckBuilderProp
   const [result, setResult] = useState<BuiltDeck | null>(null);
   const [request, setRequest] = useState<BuildRequest | null>(null);
   const [source, setSource] = useState<PoolCard[]>([]);
+  const [best, setBest] = useState<BestSearch | null>(null);
+  const [bestBracket, setBestBracket] = useState<BracketId>('any');
+  const autoStarted = useRef(false);
+  const changersRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     let cancel = false;
     void (async () => {
+      setPoolReady(false);
       if (entries.length === 0) {
         setStatus('Waiting for the collection to finish syncing…');
         return;
@@ -98,7 +107,11 @@ export function DeckBuilder({ entries, decks, onClose, onSave }: DeckBuilderProp
         const tagged = collectPool(entries, decks);
         setPool(tagged);
         setRanked(rankOwnedCommanders(tagged, 'commander', { ignoreLegality, includeUncards }));
-      }).catch((error) => console.warn(error));
+        setPoolReady(true);
+      }).catch((error) => {
+        console.warn(error);
+        if (!cancel) setPoolReady(true);
+      });
     })();
     return () => {
       cancel = true;
@@ -177,8 +190,62 @@ export function DeckBuilder({ entries, decks, onClose, onSave }: DeckBuilderProp
     setRequest(nextRequest);
     setSource([...pool, ...extras]);
     setResult(built);
+    setBest(null);
     setStatus('');
   }
+
+  async function buildBest(seed = 1) {
+    if (pool.length === 0) {
+      setStatus('Waiting for the collection to finish syncing…');
+      return;
+    }
+    setResult(null);
+    setBest(null);
+    const changers = await loadGameChangers();
+    if (bestBracket !== 'any' && changers.size === 0) {
+      setStatus('Could not load the Game Changers list from Scryfall. Try again in a moment.');
+      return;
+    }
+    changersRef.current = changers;
+    const found = await findBestCommandersAsync(pool, {
+      bracket: bestBracket,
+      ignoreLegality,
+      includeUncards: ignoreLegality && includeUncards,
+      gameChangers: changers,
+      seed,
+      onProgress: (done, total, label) => setStatus(label ? `Trying ${label} (${done + 1} of ${total})` : 'Comparing commanders…'),
+    });
+    if (!found) {
+      setStatus('No legal commanders in your collection.');
+      return;
+    }
+    const winner = found.winner;
+    setBest(found);
+    setSource(pool);
+    setRequest({
+      format: 'commander',
+      commander: winner.faces[0],
+      partner: winner.faces[1] ?? null,
+      colors: winner.colors,
+      theme: '',
+      onlyOwned: true,
+      buyLimit: 0,
+      allowInOtherDecks: true,
+      seed,
+      bracket: bestBracket,
+      gameChangers: changers,
+      ignoreLegality,
+      includeUncards: ignoreLegality && includeUncards,
+    });
+    setResult(winner.deck);
+    setStatus('');
+  }
+
+  useEffect(() => {
+    if (!autoStart || autoStarted.current || !poolReady) return;
+    autoStarted.current = true;
+    void buildBest(1);
+  }, [autoStart, poolReady]);
 
   return (
     <section className="deck-builder" data-deck-builder={result ? 'result' : 'setup'}>
@@ -186,6 +253,40 @@ export function DeckBuilder({ entries, decks, onClose, onSave }: DeckBuilderProp
         <button type="button" className="btn" onClick={onClose}>All decks</button>
       </div>
       <h2>Build a deck for me</h2>
+      <div className="best-launch">
+        <button type="button" className="btn primary best-btn" onClick={() => void buildBest(1)} disabled={pool.length === 0 || status.startsWith('Trying') || status.startsWith('Comparing')}>Build my best deck</button>
+        <details className="options-disclosure">
+          <summary>Options</summary>
+          <fieldset className="bracket-picker">
+            <legend>Bracket for this search</legend>
+            {BRACKETS.map((item) => (
+              <label key={`best-${String(item.id)}`} className="check">
+                <input type="radio" name="best-bracket" checked={bestBracket === item.id} onChange={() => setBestBracket(item.id)} />
+                <span><strong>{item.label}</strong> — {item.blurb}</span>
+              </label>
+            ))}
+          </fieldset>
+          <label className="check">
+            <input type="checkbox" checked={ignoreLegality} onChange={(event) => {
+              const next = event.target.checked;
+              setIgnoreLegality(next);
+              if (!next) setIncludeUncards(false);
+              saveCasualChoice(next, next ? includeUncards : false);
+            }} />
+            Ignore banned & illegal cards (casual)
+          </label>
+          {ignoreLegality && (
+            <label className="check">
+              <input type="checkbox" checked={includeUncards} onChange={(event) => {
+                setIncludeUncards(event.target.checked);
+                saveCasualChoice(ignoreLegality, event.target.checked);
+              }} />
+              Include Un- / acorn / digital cards
+            </label>
+          )}
+          <p className="hint">This search defaults to Any / no limit, and it stays legal unless casual is on.</p>
+        </details>
+      </div>
       <p className="hint">Uses cards in this collection. Basics can be added past the copies you own. Nothing here is priced or saved to the repo.</p>
       {status && <p role="status">{status}</p>}
       {!result && (
@@ -288,6 +389,47 @@ export function DeckBuilder({ entries, decks, onClose, onSave }: DeckBuilderProp
         </div>
       )}
       {result && request && (
+        <>
+        {best && (() => {
+          const active = best.leaderboard.find((pick) => pick.faces[0].name === result.commander?.name && (pick.faces[1]?.name ?? '') === (result.partner?.name ?? '')) ?? best.winner;
+          return (
+          <section className="best-board" aria-label="Commander leaderboard" data-best-board data-best-winner={active.faces.map((face) => face.name).join(' & ')}>
+            <h3>Why this commander</h3>
+            <p>{active.power.why}</p>
+            <p className="hint">{active.power.weakness} Score {active.power.score}. Tried {best.tried} of {best.considered} commanders.</p>
+            <ol>
+              {best.leaderboard.map((pick) => (
+                <li key={pick.faces.map((face) => face.name).join('|')}>
+                  <button type="button" className="commander-pick" aria-pressed={pick.faces[0].name === result.commander?.name && (pick.faces[1]?.name ?? '') === (result.partner?.name ?? '')} onClick={() => {
+                    setResult(pick.deck);
+                    setRequest({
+                      format: 'commander',
+                      commander: pick.faces[0],
+                      partner: pick.faces[1] ?? null,
+                      colors: pick.colors,
+                      theme: '',
+                      onlyOwned: true,
+                      buyLimit: 0,
+                      allowInOtherDecks: true,
+                      seed: best.seed,
+                      bracket: bestBracket,
+                      gameChangers: changersRef.current,
+                      ignoreLegality,
+                      includeUncards: ignoreLegality && includeUncards,
+                    });
+                  }}>
+                    <span>
+                      <strong>{pick.faces.map((face) => face.name).join(' & ')}</strong>
+                      <Pips colors={pick.colors} />
+                      <span className="muted">Score {pick.power.score}. {pick.power.weakness === 'No major role gap.' ? 'Covers the role targets.' : pick.power.weakness}</span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ol>
+          </section>
+          );
+        })()}
         <BuilderResult
           result={result}
           onSave={() => {
@@ -296,10 +438,11 @@ export function DeckBuilder({ entries, decks, onClose, onSave }: DeckBuilderProp
             if (ignoreLegality && includeUncards) deck.includeUncards = true;
             onSave(deck);
           }}
-          onRegenerate={() => void build(request.seed + 1, request.commander)}
+          onRegenerate={() => best ? void buildBest(best.seed + 1) : void build(request.seed + 1, request.commander)}
           onSwap={(name) => setResult(swapBuiltCard(result, name, source, request))}
           onBack={() => setResult(null)}
         />
+        </>
       )}
     </section>
   );
@@ -325,7 +468,7 @@ function BuilderResult({
   return (
     <div className="build-result" data-build-result={result.name}>
       <p className="summary-line" data-build-summary={result.summary}>{result.summary}</p>
-      {result.bracket && result.bracket !== 'any' && (
+      {result.bracket && (
         <p className="hint" data-bracket={result.bracket}>Building at {bracketLabel(result.bracket)}</p>
       )}
       {result.ignoreLegality && <p className="origin-tag" data-casual-badge>Casual: legality ignored</p>}
@@ -434,9 +577,8 @@ function BuilderResult({
 }
 
 function recordFromBuilt(result: BuiltDeck): DeckRecord {
-  const board = result.commander
-    ? [{ qty: 1, name: result.commander.name, set: result.commander.set, collectorNumber: result.commander.collectorNumber, foil: '' as const }]
-    : [];
+  const faces = [result.commander, result.partner].filter((card): card is PoolCard => Boolean(card));
+  const board = faces.map((card) => ({ qty: 1, name: card.name, set: card.set, collectorNumber: card.collectorNumber, foil: '' as const }));
   const deck = createUserDeck(result.name, result.format, board);
   deck.mainboard = result.cards.map((card) => ({
     qty: card.qty,

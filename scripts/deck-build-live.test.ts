@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { ScryfallCard } from '../src/cards';
 import { loadGameChangers } from '../src/brackets';
-import { buildDeck, rankOwnedCommanders, suggestColors, type PoolCard } from '../src/deckBuild';
+import { buildDeck, findBestCommanders, rankOwnedCommanders, suggestColors, type PoolCard } from '../src/deckBuild';
 import { inferRoles } from '../src/deckAnalyze';
 import { parseMoxfieldFile } from '../src/moxfield';
 import { fetchCollection } from '../src/scryfall';
@@ -121,7 +121,26 @@ describe.skipIf(!live)('live collection build', () => {
     const onlyOptimized = [...optimizedNames].filter((name) => !coreNames.has(name));
     const onlyCore = [...coreNames].filter((name) => !optimizedNames.has(name));
 
+    const started = performance.now();
+    const best = findBestCommanders(pool, { seed: 1, bracket: 'any', gameChangers, limit: 15 });
+    const anyMs = Math.round(performance.now() - started);
+    const bracketStarted = performance.now();
+    const coreBest = findBestCommanders(pool, { seed: 1, bracket: 2, gameChangers, limit: 15 });
+    const coreMs = Math.round(performance.now() - bracketStarted);
+    const brief = (pick: NonNullable<typeof best>['winner']) => ({
+      names: pick.faces.map((face) => face.name),
+      colors: pick.colors,
+      score: pick.power.score,
+      why: pick.power.why,
+      weakness: pick.power.weakness,
+      summary: pick.deck.summary,
+      roles: pick.deck.roles.map((role) => ({ id: role.id, count: role.count, level: role.level, min: role.min, aim: role.aim })),
+      gameChangers: pick.deck.check?.gameChangers,
+    });
+
     writeFileSync('/tmp/build-report.json', JSON.stringify({
+      best: best ? { ms: anyMs, considered: best.considered, tried: best.tried, winner: brief(best.winner), leaderboard: best.leaderboard.map(brief) } : null,
+      bracket2: coreBest ? { ms: coreMs, winner: brief(coreBest.winner), leaderboard: coreBest.leaderboard.map(brief) } : null,
       brackets: {
         core: { summary: core.summary, gameChangers: core.check?.gameChangers, skipped: core.skipped, tutors: core.check?.tutors, fastMana: core.check?.fastMana },
         optimized: { summary: optimized.summary, gameChangers: optimized.check?.gameChangers, tutors: optimized.check?.tutors, fastMana: optimized.check?.fastMana },

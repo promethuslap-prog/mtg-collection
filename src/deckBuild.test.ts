@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDeck, canBeCommander, passesLegality, rankOwnedCommanders, suggestColors, swapBuiltCard, type PoolCard } from './deckBuild';
+import { buildDeck, canBeCommander, findBestCommanders, passesLegality, rankOwnedCommanders, suggestColors, swapBuiltCard, type PoolCard } from './deckBuild';
 import { reviewCards } from './brackets';
 
 function card(partial: Partial<PoolCard> & { name: string }): PoolCard {
@@ -261,5 +261,48 @@ describe('deck builder', () => {
     expect(passesLegality(squirrel, 'commander', { ignoreLegality: true, includeUncards: true })).toBe(true);
     expect(passesLegality(lotus, 'commander', { ignoreLegality: false })).toBe(false);
     expect(passesLegality(lotus, 'commander', { ignoreLegality: true })).toBe(true);
+  });
+
+  it('picks the commander with a deeper, more complete pool', () => {
+    const lonely = card({
+      name: 'Laboratory Maniac',
+      typeLine: 'Legendary Creature — Human Wizard',
+      colorIdentity: ['U'],
+      manaCost: '{2}{U}',
+      oracleText: 'Draw a card.',
+      roles: ['draw'],
+    });
+    const island = card({ name: 'Island', typeLine: 'Basic Land — Island', colorIdentity: ['U'], producedMana: ['U'], roles: ['land'], manaCost: '', cmc: 0 });
+    const best = findBestCommanders([...redPool(), lonely, island], { seed: 1, bracket: 'any', limit: 8 });
+    expect(best?.winner.faces.map((face) => face.name)).toEqual(['Krenko, Mob Boss']);
+    expect(best?.leaderboard.length).toBeGreaterThan(1);
+    expect(best?.winner.power.why).toMatch(/Krenko/);
+    const again = findBestCommanders([...redPool(), lonely, island], { seed: 1, bracket: 'any', limit: 8 });
+    expect(again?.winner.faces[0].name).toBe(best?.winner.faces[0].name);
+    expect(again?.winner.power.score).toBe(best?.winner.power.score);
+  });
+
+  it('builds an owned partner pair as one commander option', () => {
+    const tymna = card({
+      name: 'Tymna the Weaver',
+      typeLine: 'Legendary Creature — Human Cleric',
+      colorIdentity: ['W', 'B'],
+      keywords: ['Partner'],
+      oracleText: 'Partner (You can have two commanders if both have partner.)',
+      manaCost: '{1}{W}{B}',
+    });
+    const thrasios = card({
+      name: 'Thrasios, Triton Hero',
+      typeLine: 'Legendary Creature — Merfolk Wizard',
+      colorIdentity: ['G', 'U'],
+      keywords: ['Partner'],
+      oracleText: 'Partner (You can have two commanders if both have partner.)',
+      manaCost: '{G}{U}',
+    });
+    const best = findBestCommanders([...redPool(), tymna, thrasios], { seed: 1, bracket: 'any', limit: 20 });
+    const pair = best?.leaderboard.find((pick) => pick.faces.length === 2);
+    expect(pair?.faces.map((face) => face.name).sort()).toEqual(['Thrasios, Triton Hero', 'Tymna the Weaver']);
+    expect(pair?.colors).toEqual(['W', 'U', 'B', 'G']);
+    expect(pair?.deck.partner?.name).toBe('Tymna the Weaver');
   });
 });

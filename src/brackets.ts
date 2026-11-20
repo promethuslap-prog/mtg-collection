@@ -84,6 +84,18 @@ const COMBO_PAIRS: Array<[string, string]> = [
   ["Painter's Servant", 'Grindstone'],
 ];
 
+const comboPartners = new Map<string, Set<string>>();
+for (const [a, b] of COMBO_PAIRS) {
+  const left = normalizeName(a);
+  const right = normalizeName(b);
+  const leftSet = comboPartners.get(left) ?? new Set<string>();
+  const rightSet = comboPartners.get(right) ?? new Set<string>();
+  leftSet.add(right);
+  rightSet.add(left);
+  comboPartners.set(left, leftSet);
+  comboPartners.set(right, rightSet);
+}
+
 let memoryChangers: { at: number; names: Set<string> } | null = null;
 
 export function bracketLabel(id: BracketId): string {
@@ -115,10 +127,10 @@ export function isGameChanger(name: string, gameChangers: Set<string>): boolean 
 }
 
 export function comboWith(name: string, chosen: Iterable<string>): string | null {
-  const key = normalizeName(name);
+  const partners = comboPartners.get(normalizeName(name));
+  if (!partners) return null;
   for (const other of chosen) {
-    const pair = comboPartner(key, normalizeName(other));
-    if (pair) return other;
+    if (partners.has(normalizeName(other))) return other;
   }
   return null;
 }
@@ -227,11 +239,7 @@ export async function loadGameChangers(): Promise<Set<string>> {
 }
 
 function comboPartner(left: string, right: string): boolean {
-  return COMBO_PAIRS.some(([a, b]) => {
-    const na = normalizeName(a);
-    const nb = normalizeName(b);
-    return (left === na && right === nb) || (left === nb && right === na);
-  });
+  return comboPartners.get(left)?.has(right) ?? false;
 }
 
 function isTutor(text: string): boolean {

@@ -51,6 +51,7 @@ export interface BuildRequest {
   gameChangers?: Set<string>;
   ignoreLegality?: boolean;
   includeUncards?: boolean;
+  partner?: PoolCard | null;
 }
 
 export interface BuiltCard {
@@ -90,6 +91,30 @@ export interface BuiltDeck {
   skipped?: SkipNote[];
   ignoreLegality?: boolean;
   casualCards?: Array<{ name: string; tag: string }>;
+  partner?: PoolCard | null;
+  power?: DeckPower;
+}
+
+export interface DeckPower {
+  score: number;
+  why: string;
+  weakness: string;
+}
+
+export interface BestPick {
+  deck: BuiltDeck;
+  power: DeckPower;
+  faces: PoolCard[];
+  colors: string[];
+  playable: number;
+}
+
+export interface BestSearch {
+  winner: BestPick;
+  leaderboard: BestPick[];
+  tried: number;
+  considered: number;
+  seed: number;
 }
 
 export interface RankedCommander {
@@ -124,6 +149,184 @@ export function rankOwnedCommanders(pool: PoolCard[], format: BuildFormat = 'com
   return ranked;
 }
 
+export function findBestCommanders(pool: PoolCard[], options?: {
+  bracket?: BracketId;
+  ignoreLegality?: boolean;
+  includeUncards?: boolean;
+  gameChangers?: Set<string>;
+  seed?: number;
+  limit?: number;
+}): BestSearch | null {
+  const legality = { ignoreLegality: options?.ignoreLegality, includeUncards: options?.includeUncards };
+  const shortlist = commanderShortlist(pool, legality).slice(0, options?.limit ?? 15);
+  if (shortlist.length === 0) return null;
+  const seed = options?.seed || 1;
+  const picks = shortlist.map((choice) => scoreChoice(pool, choice, { ...options, seed }));
+  picks.sort((a, b) => b.power.score - a.power.score || a.faces.map((face) => face.name).join().localeCompare(b.faces.map((face) => face.name).join()));
+  return { winner: picks[0], leaderboard: picks.slice(0, 5), tried: picks.length, considered: commanderShortlist(pool, legality).length, seed };
+}
+
+export async function findBestCommandersAsync(
+  pool: PoolCard[],
+  options: Parameters<typeof findBestCommanders>[1] & { onProgress?: (done: number, total: number, label: string) => void },
+): Promise<BestSearch | null> {
+  const legality = { ignoreLegality: options?.ignoreLegality, includeUncards: options?.includeUncards };
+  const all = commanderShortlist(pool, legality);
+  const shortlist = all.slice(0, options?.limit ?? 15);
+  if (shortlist.length === 0) return null;
+  const seed = options?.seed || 1;
+  const picks: BestPick[] = [];
+  for (let index = 0; index < shortlist.length; index += 1) {
+    const choice = shortlist[index];
+    options?.onProgress?.(index, shortlist.length, choice.faces.map((face) => face.name).join(' & '));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    picks.push(scoreChoice(pool, choice, { ...options, seed }));
+  }
+  options?.onProgress?.(shortlist.length, shortlist.length, '');
+  picks.sort((a, b) => b.power.score - a.power.score || a.faces.map((face) => face.name).join().localeCompare(b.faces.map((face) => face.name).join()));
+  return { winner: picks[0], leaderboard: picks.slice(0, 5), tried: picks.length, considered: all.length, seed };
+}
+
+function commanderShortlist(pool: PoolCard[], options?: LegalityOptions): Array<{ faces: PoolCard[]; playable: number }> {
+  const legal = pool.filter((card) => card.owned && card.qty > 0 && passesLegality(card, 'commander', options));
+  const choices: Array<{ faces: PoolCard[]; playable: number }> = [];
+  const solos = legal.filter((card) => canBeCommander(card, options) && companionKind(card).kind !== 'background');
+  for (const card of solos) {
+    choices.push({ faces: [card], playable: playableCount(pool, unionIdentity([card]), new Set([normalizeName(card.name)]), options) });
+  }
+  const pushPair = (left: PoolCard, right: PoolCard) => {
+    const names = [normalizeName(left.name), normalizeName(right.name)].sort();
+    if (names[0] === names[1]) return;
+    const key = names.join('|');
+    if (seenPairs.has(key)) return;
+    seenPairs.add(key);
+    const faces = [left, right].sort((a, b) => a.name.localeCompare(b.name));
+    choices.push({
+      faces,
+      playable: playableCount(pool, unionIdentity(faces), new Set(names), options),
+    });
+  };
+  const seenPairs = new Set<string>();
+  const partners = legal.filter((card) => companionKind(card).kind === 'partner');
+  const friends = legal.filter((card) => companionKind(card).kind === 'friends');
+  const doctors = legal.filter((card) => /doctor/.test(card.typeLine.toLowerCase()) && canBeCommander(card, options));
+  const companions = legal.filter((card) => companionKind(card).kind === 'doctor');
+  const backgrounds = legal.filter((card) => companionKind(card).kind === 'background');
+  const choosers = legal.filter((card) => companionKind(card).kind === 'choose-background');
+  for (let i = 0; i < partners.length; i += 1) for (let j = i + 1; j < partners.length; j += 1) pushPair(partners[i], partners[j]);
+  for (let i = 0; i < friends.length; i += 1) for (let j = i + 1; j < friends.length; j += 1) pushPair(friends[i], friends[j]);
+  for (const doctor of doctors) for (const companion of companions) pushPair(doctor, companion);
+  for (const chooser of choosers) for (const background of backgrounds) pushPair(chooser, background);
+  for (const card of legal) {
+    const kind = companionKind(card);
+    if (kind.kind !== 'named' || !kind.with) continue;
+    const match = legal.find((other) => normalizeName(other.name) === normalizeName(kind.with ?? ''));
+    if (match) pushPair(card, match);
+  }
+  choices.sort((a, b) => b.playable - a.playable || a.faces.map((face) => face.name).join().localeCompare(b.faces.map((face) => face.name).join()));
+  return choices;
+}
+
+function scoreChoice(pool: PoolCard[], choice: { faces: PoolCard[]; playable: number }, options?: {
+  bracket?: BracketId;
+  ignoreLegality?: boolean;
+  includeUncards?: boolean;
+  gameChangers?: Set<string>;
+  seed?: number;
+}): BestPick {
+  const [primary, partner] = choice.faces;
+  const deck = buildDeck(pool, {
+    format: 'commander',
+    commander: primary,
+    partner: partner ?? null,
+    colors: unionIdentity(choice.faces),
+    theme: '',
+    onlyOwned: true,
+    buyLimit: 0,
+    allowInOtherDecks: true,
+    seed: options?.seed || 1,
+    bracket: options?.bracket ?? 'any',
+    gameChangers: options?.gameChangers,
+    ignoreLegality: options?.ignoreLegality,
+    includeUncards: options?.includeUncards,
+  });
+  deck.power = scoreBuiltDeck(deck, choice.faces);
+  return { deck, power: deck.power, faces: choice.faces, colors: unionIdentity(choice.faces), playable: choice.playable };
+}
+
+function scoreBuiltDeck(deck: BuiltDeck, faces: PoolCard[]): DeckPower {
+  let score = 0;
+  const gaps: string[] = [];
+  const strengths: string[] = [];
+  for (const role of deck.roles) {
+    if (role.id === 'land') {
+      if (role.level === 'ok') score += 16;
+      else if (role.level === 'low') {
+        score -= 12 * (role.min - role.count);
+        gaps.push('lands');
+      } else {
+        score -= 8 * (role.count - role.aim);
+        gaps.push('extra lands');
+      }
+      continue;
+    }
+    const weight = role.id === 'wipe' ? 7 : 12;
+    if (role.count >= role.min) {
+      score += weight;
+      strengths.push(role.label.toLowerCase());
+    } else {
+      score -= weight * (role.min - role.count);
+      gaps.push(role.label.toLowerCase());
+    }
+  }
+  const spells = deck.cards.filter((card) => !isLand(card.card));
+  const spellQty = spells.reduce((sum, card) => sum + card.qty, 0) || 1;
+  const average = spells.reduce((sum, card) => sum + card.card.cmc * card.qty, 0) / spellQty;
+  score += (3.1 - average) * 9;
+  const qualityTotal = spells.reduce((sum, card) => sum + quality(card.card), 0);
+  score += (qualityTotal / (spells.length || 1)) * 1.6;
+  let synergy = 0;
+  for (const spell of spells) {
+    if (faces.some((face) => synergyScore(spell.card, face, '') > 0)) synergy += spell.qty;
+  }
+  score += synergy * 0.8;
+  const fast = deck.check?.fastMana.length ?? deck.cards.filter((card) => card.card.fastMana).length;
+  const tutors = deck.check?.tutors.length ?? deck.cards.filter((card) => card.card.tutor).length;
+  const changers = deck.check?.gameChangers.length ?? deck.cards.filter((card) => card.card.gameChanger).length;
+  const interaction = (deck.roles.find((role) => role.id === 'removal')?.count ?? 0) + (deck.roles.find((role) => role.id === 'wipe')?.count ?? 0);
+  score += Math.min(5, fast) * 3.5 + Math.min(8, tutors) * 2 + Math.min(8, changers) * 2.5 + Math.min(16, interaction);
+  score += faces.reduce((sum, face) => sum + quality(face) * 2.5, 0);
+  const land = deck.roles.find((role) => role.id === 'land');
+  if (land && land.count > land.max) score -= (land.count - land.aim) * 6;
+  const names = faces.map((face) => face.name).join(' & ');
+  const colors = unionIdentity(faces).join('') || 'colorless';
+  const why = `${names} has the strongest ${colors} build: average mana value ${average.toFixed(2)}, ${synergy} synergistic cards${strengths.length ? `, and covered ${strengths.join(', ')}` : ''}.`;
+  const weakness = gaps.length ? `Thin on ${gaps.slice(0, 2).join(' and ')}.` : 'No major role gap.';
+  return { score: Math.round(score * 10) / 10, why, weakness };
+}
+
+function companionKind(card: PoolCard): { kind: 'partner' | 'friends' | 'doctor' | 'choose-background' | 'background' | 'named' | 'solo'; with?: string } {
+  const text = `${card.keywords.join('\n')}\n${card.oracleText}`;
+  const named = text.match(/partner with ([^(\n.]+)/i);
+  if (named) return { kind: 'named', with: named[1].trim() };
+  const lowered = text.toLowerCase();
+  if (lowered.includes('friends forever')) return { kind: 'friends' };
+  if (lowered.includes("doctor's companion")) return { kind: 'doctor' };
+  if (/\bpartner\b/.test(lowered)) return { kind: 'partner' };
+  if (lowered.includes('choose a background')) return { kind: 'choose-background' };
+  if (card.typeLine.toLowerCase().includes('background')) return { kind: 'background' };
+  return { kind: 'solo' };
+}
+
+function playableCount(pool: PoolCard[], identity: string[], exclude: Set<string>, options?: LegalityOptions): number {
+  return pool.filter((card) => card.owned && !isLand(card) && !exclude.has(normalizeName(card.name)) && fits(card, identity, 'commander', options)).length;
+}
+
+function unionIdentity(cards: PoolCard[]): string[] {
+  const present = new Set(cards.flatMap((card) => card.colorIdentity));
+  return COLORS.filter((color) => present.has(color));
+}
+
 export function suggestColors(pool: PoolCard[], format: BuildFormat, theme: string, seed: number): { colors: string[]; playable: number } {
   const options: string[][] = [];
   for (const color of COLORS) options.push([color]);
@@ -155,12 +358,22 @@ export function buildDeck(pool: PoolCard[], request: BuildRequest): BuiltDeck {
   const spec = formatSpec(format);
   const mainSize = spec.commander ? 99 : 60;
   const commander = request.commander;
-  const colors = commander ? commander.colorIdentity : request.colors.length ? request.colors : suggestColors(pool, format, request.theme, request.seed).colors;
+  const partner = request.partner ?? null;
+  const faces = [commander, partner].filter((card): card is PoolCard => Boolean(card));
+  const colors = faces.length ? unionIdentity(faces) : request.colors.length ? request.colors : suggestColors(pool, format, request.theme, request.seed).colors;
   const identity = [...colors];
+  const scoringCommander = faces.length > 1 ? {
+    ...faces[0],
+    name: faces.map((card) => card.name).join(' & '),
+    colorIdentity: identity,
+    typeLine: faces.map((card) => card.typeLine).join(' '),
+    oracleText: faces.map((card) => card.oracleText).join('\n'),
+    keywords: faces.flatMap((card) => card.keywords),
+  } : commander;
   const buyLimit = request.onlyOwned ? 0 : Math.max(0, Math.floor(request.buyLimit));
   const rng = mulberry32(request.seed || 1);
   const used = new Set<string>();
-  if (commander) used.add(normalizeName(commander.name));
+  for (const face of faces) used.add(normalizeName(face.name));
 
   const available = [...pool, ...(request.extras ?? [])].filter((card) => {
     if (used.has(normalizeName(card.name))) return false;
@@ -175,6 +388,7 @@ export function buildDeck(pool: PoolCard[], request: BuildRequest): BuiltDeck {
     if (!existing || (card.owned && !existing.owned) || card.qty > existing.qty) ownedByName.set(key, card);
   }
   const unique = [...ownedByName.values()];
+  const viewed = new Map<string, PoolCard>();
   const nonlands = unique.filter((card) => !isLand(card));
   const nonbasics = unique.filter((card) => isLand(card) && !isBasic(card));
   for (const card of unique) {
@@ -200,8 +414,10 @@ export function buildDeck(pool: PoolCard[], request: BuildRequest): BuiltDeck {
   }
 
   function view(card: PoolCard): PoolCard {
+    const cached = viewed.get(card.name);
+    if (cached) return cached;
     const signals = detectSignals(card, gameChangers);
-    return {
+    const next = {
       ...card,
       gameChanger: card.gameChanger ?? signals.gameChanger,
       massLandDenial: card.massLandDenial ?? signals.massLandDenial,
@@ -209,6 +425,8 @@ export function buildDeck(pool: PoolCard[], request: BuildRequest): BuiltDeck {
       tutor: card.tutor ?? signals.tutor,
       fastMana: card.fastMana ?? signals.fastMana,
     };
+    viewed.set(card.name, next);
+    return next;
   }
 
   function consider(options: Array<{ card: PoolCard; score: number }>): { card: PoolCard; score: number } | null {
@@ -234,7 +452,7 @@ export function buildDeck(pool: PoolCard[], request: BuildRequest): BuiltDeck {
     const room = nonlandSlots - slots();
     if (room <= 0) return false;
     const qty = copyCount(card, format, room);
-    chosen.push(toBuilt(card, qty, role, reasonFor(card, role, commander, request.theme)));
+    chosen.push(toBuilt(card, qty, role, reasonFor(card, role, scoringCommander, request.theme)));
     used.add(normalizeName(card.name));
     for (const item of card.roles) counts[item] += qty;
     curve[Math.min(6, Math.floor(card.cmc))] += qty;
@@ -248,7 +466,7 @@ export function buildDeck(pool: PoolCard[], request: BuildRequest): BuiltDeck {
   function candidates(role: RoleId | 'threat') {
     return nonlands.filter((card) => !used.has(normalizeName(card.name)) && (card.owned || buys < buyLimit)).map((card) => ({
       card,
-      score: baseScore(card, commander, request.theme, curve, nonlandSlots)
+      score: baseScore(card, scoringCommander, request.theme, curve, nonlandSlots)
         + (role !== 'threat' && card.roles.includes(role) ? 28 : 0)
         - (role === 'threat' ? card.roles.reduce((penalty, item) => penalty + (item !== 'land' && counts[item] >= aims[item] ? 18 : 0), 0) : 0),
     })).sort((a, b) => b.score - a.score || a.card.name.localeCompare(b.card.name));
@@ -342,15 +560,18 @@ export function buildDeck(pool: PoolCard[], request: BuildRequest): BuiltDeck {
     skipped: [...skipped.entries()].map(([name, reason]) => ({ name, reason })),
     ignoreLegality: Boolean(request.ignoreLegality),
     casualCards: request.ignoreLegality ? casualList(trimmed, format) : [],
+    partner,
+    ...(partner ? { name: `${commander?.name ?? 'Deck'} & ${partner.name} built` } : {}),
   };
 }
 
 export function swapBuiltCard(built: BuiltDeck, name: string, pool: PoolCard[], request: BuildRequest): BuiltDeck {
   const target = built.cards.find((card) => normalizeName(card.card.name) === normalizeName(name));
   if (!target || isBasic(target.card)) return built;
-  const identity = built.commander ? built.commander.colorIdentity : request.colors;
+  const faces = [built.commander, built.partner].filter((card): card is PoolCard => Boolean(card));
+  const identity = faces.length ? unionIdentity(faces) : request.colors;
   const used = new Set(built.cards.map((card) => normalizeName(card.card.name)));
-  if (built.commander) used.add(normalizeName(built.commander.name));
+  for (const face of faces) used.add(normalizeName(face.name));
   const options = pool.filter((card) => {
     if (used.has(normalizeName(card.name)) || isBasic(card) || isLand(card) !== (target.role === 'land')) return false;
     if (!card.owned && request.onlyOwned) return false;
@@ -383,7 +604,14 @@ export function swapBuiltCard(built: BuiltDeck, name: string, pool: PoolCard[], 
   cards.push(toBuilt(next.card, qty, target.role === 'land' ? 'land' : primaryRole(next.card), `Next owned alternative for this slot. ${reasonFor(next.card, primaryRole(next.card), built.commander, request.theme)}`));
   const pips = pipCounts(cards.filter((card) => !isLand(card.card)));
   const fitted = fitExact(cards, built.mainSize, identity, pips, pool);
-  return present(fitted, built.commander, built.format, identity, built.seed, request.theme);
+  const swapped = present(fitted, built.commander, built.format, identity, built.seed, request.theme);
+  return {
+    ...swapped,
+    partner: built.partner,
+    bracket: built.bracket,
+    ignoreLegality: built.ignoreLegality,
+    casualCards: built.ignoreLegality ? casualList(swapped.cards, built.format) : [],
+  };
 }
 
 export function mulberry32(seed: number): () => number {
