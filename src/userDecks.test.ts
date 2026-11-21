@@ -69,6 +69,24 @@ Maybeboard
     expect(restored.decks).toHaveLength(1);
     expect(restored.decks[0].mainboard[0]).toMatchObject({ name: 'Lightning Bolt', qty: 4 });
     expect(restored.decks[0].origin).toBe('local');
+    const noted = { ...deck!, strategy: {
+      archetype: 'Goblin Tokens',
+      overview: 'Generated overview.',
+      early: 'Early.',
+      mid: 'Mid.',
+      late: 'Late.',
+      synergies: ['A + B: tokens.'],
+      wins: ['Attack.'],
+      mulligan: 'Three lands.',
+      strengths: 'Ramp is fine.',
+      weaknesses: 'Thin on card draw.',
+      playAround: 'Hold a draw spell.',
+      bracketNote: 'Estimated bracket: Core.',
+      notes: 'My edited plan.',
+    } };
+    const roundTrip = parseUserDeckBackup(serializeUserDecks([noted]));
+    expect(roundTrip.decks[0].strategy?.notes).toBe('My edited plan.');
+    expect(roundTrip.decks[0].strategy?.archetype).toBe('Goblin Tokens');
     expect(parseUserDeckBackup('{"version":1,"entries":[]}').error).toMatch(/deck backup/);
   });
 });

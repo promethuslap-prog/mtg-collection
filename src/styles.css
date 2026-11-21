@@ -168,6 +168,21 @@ main,
 
 .deck-copy { display: grid; align-content: start; gap: 4px; }
 .deck-copy strong { font-family: var(--display); font-size: 1.25rem; }
+.deck-blurb { color: var(--muted); font-size: 0.92rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+.strategy {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(24, 35, 30, 0.72);
+}
+.strategy summary { cursor: pointer; font-family: var(--display); font-size: 1.2rem; }
+.strategy h3 { margin: 4px 0 0; font-size: 1rem; }
+.strategy p { margin: 0; }
+.strategy ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
 
 .health-ok { color: #b7e4b0; }
 .health-low { color: #f0b4a4; }

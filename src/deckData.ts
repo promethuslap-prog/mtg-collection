@@ -161,6 +161,17 @@ function lineFromParsed(line: { quantity: number; name: string; set?: string; co
   };
 }
 
+export function cachedLines(lines: DeckCardLine[]): Array<CachedPrinting | undefined> {
+  ensureCache();
+  return lines.map((line) => {
+    if (line.set && line.collectorNumber) {
+      const found = memoryCards.get(`${line.set}|${line.collectorNumber.toLowerCase()}`);
+      if (found) return found;
+    }
+    return memoryCards.get(normalizeName(line.name));
+  });
+}
+
 export async function resolveLines(lines: DeckCardLine[]): Promise<CachedPrinting[]> {
   ensureCache();
   const result: Array<CachedPrinting | undefined> = lines.map((line) => {

@@ -27,11 +27,13 @@ import { searchOrdered } from '../scryfall';
 import { formatSpec, playingLines, type DeckRecord } from '../deckModel';
 import { downloadText } from '../io';
 import { normalizeName } from '../text';
+import { describeBuilt, strategyComments } from '../strategy';
 import { createUserDeck, toMoxfieldText } from '../userDecks';
 import type { CollectionEntry } from '../types';
 import { isOutsidePaper } from '../cards';
 import { BRACKETS, bracketLabel, loadGameChangers, type BracketId } from '../brackets';
 import { Pips } from './bits';
+import { StrategyPanel } from './StrategyPanel';
 
 const FORMATS: Array<{ id: BuildFormat; label: string }> = [
   { id: 'commander', label: 'Commander' },
@@ -432,8 +434,11 @@ export function DeckBuilder({ entries, decks, onClose, onSave, autoStart = false
         })()}
         <BuilderResult
           result={result}
-          onSave={() => {
+          onSave={(notes) => {
             const deck = recordFromBuilt(result);
+            const strategy = describeBuilt(result);
+            if (notes.trim()) strategy.notes = notes.trim();
+            deck.strategy = strategy;
             if (ignoreLegality) deck.ignoreLegality = true;
             if (ignoreLegality && includeUncards) deck.includeUncards = true;
             onSave(deck);
@@ -456,13 +461,19 @@ function BuilderResult({
   onBack,
 }: {
   result: BuiltDeck;
-  onSave: () => void;
+  onSave: (notes: string) => void;
   onRegenerate: () => void;
   onSwap: (name: string) => void;
   onBack: () => void;
 }) {
   const record = recordFromBuilt(result);
+  const strategy = describeBuilt(result);
+  const [notes, setNotes] = useState('');
+  const [includeStrategy, setIncludeStrategy] = useState(false);
   const text = toMoxfieldText(record);
+  const download = includeStrategy ? `${strategyComments({ ...strategy, ...(notes.trim() ? { notes: notes.trim() } : {}) })}\n\n${text}` : text;
+  const savedKey = `${result.commander?.name ?? ''}|${result.partner?.name ?? ''}|${result.seed}|${result.cards.length}`;
+  useEffect(() => setNotes(''), [savedKey]);
   const maxCurve = Math.max(1, ...result.curve);
   const groups = groupCards(result.cards);
   return (
@@ -500,13 +511,18 @@ function BuilderResult({
           {result.skipped.slice(0, 8).map((skip) => <li key={skip.name}>Skipped {skip.name}: {skip.reason}</li>)}
         </ul>
       )}
+      <StrategyPanel strategy={{ ...strategy, ...(notes.trim() ? { notes: notes.trim() } : {}) }} editable onDraft={setNotes} onRegenerate={() => setNotes('')} />
       <div className="row-actions">
-        <button type="button" className="btn primary" onClick={onSave}>Save as new deck</button>
+        <button type="button" className="btn primary" onClick={() => onSave(notes)}>Save as new deck</button>
         <button type="button" className="btn" onClick={onRegenerate}>Regenerate</button>
         <button type="button" className="btn" onClick={() => void navigator.clipboard.writeText(text).catch(() => undefined)}>Copy for Moxfield</button>
-        <button type="button" className="btn" onClick={() => downloadText(`${result.name.replace(/[^\w]+/g, '-').replace(/^-|-$/g, '') || 'deck'}.txt`, text, 'text/plain')}>Download .txt</button>
+        <button type="button" className="btn" onClick={() => downloadText(`${result.name.replace(/[^\w]+/g, '-').replace(/^-|-$/g, '') || 'deck'}.txt`, download, 'text/plain')}>Download .txt</button>
         <button type="button" className="btn" onClick={onBack}>Change settings</button>
       </div>
+      <label className="check">
+        <input type="checkbox" checked={includeStrategy} onChange={(event) => setIncludeStrategy(event.target.checked)} />
+        Include strategy notes
+      </label>
       <div className="role-list">
         {result.roles.map((role) => (
           <div key={role.id} className="role-row" data-role={role.id} data-count={role.count}>

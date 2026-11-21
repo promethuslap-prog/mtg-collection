@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { isOutsidePaper } from '../cards';
 import { loadGameChangers, reviewCards, type BracketReview } from '../brackets';
-import { analyzeDeck, combinedIdentity, type DeckReport, type KnownCard } from '../deckAnalyze';
+import { analyzeDeck, combinedIdentity, inferRoles, mergeRoles, type DeckReport, type KnownCard, type RoleId } from '../deckAnalyze';
 import {
   enrichCollection,
   knownFromCollection,
@@ -10,6 +10,7 @@ import {
   loadDeckFile,
   printingById,
   resolveCommanders,
+  cachedLines,
   resolveLines,
   tagOracleIds,
   tagsFor,
@@ -20,6 +21,7 @@ import {
 import { deckSize, formatTarget, isLocalDeck, playingLines, type DeckCardLine, type DeckRecord } from '../deckModel';
 import { formatSyncDate, formatUsd } from '../format';
 import { downloadText } from '../io';
+import { describeDeck, sameStrategy, strategyBlurb, type DeckStrategy, type StrategyBracket, type StrategySource } from '../strategy';
 import { normalizeName } from '../text';
 import {
   duplicateDeck,
@@ -31,6 +33,7 @@ import {
   upsertLine,
 } from '../userDecks';
 import { Pips } from './bits';
+import { StrategyPanel } from './StrategyPanel';
 import { DeckBuilder } from './DeckBuilder';
 import { DeckEditor, DeckExport, ImportDeckDialog, NewDeckDialog } from './DeckEditor';
 import type { CollectionEntry } from '../types';
@@ -52,6 +55,7 @@ export function DecksSection({ entries }: DecksProps) {
   const [restore, setRestore] = useState<DeckRecord[] | null>(null);
   const [building, setBuilding] = useState(false);
   const [autoBest, setAutoBest] = useState(false);
+  const [blurbs, setBlurbs] = useState<Record<string, string>>({});
 
   useEffect(() => {
     void loadDeckFile().then((file) => {
@@ -72,6 +76,28 @@ export function DecksSection({ entries }: DecksProps) {
       if (stored && stored.length > 0 && loadUserDecks().length === 0) setUserDecks(stored);
     });
   }, []);
+
+  useEffect(() => {
+    const pending = [...userDecks, ...decks].filter((deck) => !deck.strategy && !blurbs[deck.id]);
+    if (pending.length === 0) return undefined;
+    let cancel = false;
+    void (async () => {
+      for (const deck of pending) {
+        if (cancel) return;
+        try {
+          const strategy = describeCached(deck);
+          if (!strategy) continue;
+          if (cancel) return;
+          setBlurbs((current) => current[deck.id] ? current : { ...current, [deck.id]: strategyBlurb(strategy) });
+        } catch (error) {
+          console.warn(error);
+        }
+      }
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [decks, userDecks, blurbs]);
 
   useEffect(() => {
     const names = [...new Set([...decks, ...userDecks].flatMap((deck) => deck.commanders))];
@@ -198,6 +224,7 @@ export function DecksSection({ entries }: DecksProps) {
                       <strong>{deck.name}</strong>
                       <span className="origin-tag">{local ? 'Made here' : 'From Moxfield'}</span>
                       <span className="muted">{deck.format} · {count}/{target}</span>
+                      {(deck.strategy || blurbs[deck.id]) && <span className="deck-blurb" data-deck-blurb>{deck.strategy ? strategyBlurb(deck.strategy) : blurbs[deck.id]}</span>}
                       <Pips colors={identity} />
                       <span className={`health health-${healthTone(count, target)}`}>Health {quickHealth(count, target)}</span>
                     </span>
@@ -252,6 +279,7 @@ function DeckPage({
   const [panel, setPanel] = useState<'add' | 'buy' | 'cut' | 'swap'>('add');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [bracketReview, setBracketReview] = useState<BracketReview | null>(null);
+  const [strategy, setStrategy] = useState<DeckStrategy | null>(deck.strategy ?? null);
   const local = isLocalDeck(deck);
 
   useEffect(() => {
@@ -295,7 +323,16 @@ function DeckPage({
         }));
         if (!cancel) setBracketReview(reviewCards(knownCards, changers));
       } else if (!cancel) setBracketReview(null);
-      setReport(build([]));
+      const firstReport = build([]);
+      const described = await describeRecord(deck, firstReport.roles);
+      if (cancel) return;
+      setReport(firstReport);
+      if (!local || !deck.strategy?.notes) {
+        setStrategy(described);
+        if (local && !sameStrategy(deck.strategy, described)) onChange({ ...deck, strategy: described });
+      } else {
+        setStrategy(deck.strategy);
+      }
       setStatus('');
       const oracleIds = [
         ...paired.map((item) => item.printing?.oracleId ?? ''),
@@ -308,7 +345,16 @@ function DeckPage({
         card.legality = legalityFor(printing, deck.format);
         return card;
       });
-      if (!cancel) setReport(build(upgrades));
+      if (!cancel) {
+        const nextReport = build(upgrades);
+        setReport(nextReport);
+        const refreshed = await describeRecord(deck, nextReport.roles);
+        if (cancel) return;
+        if (!local || !deck.strategy?.notes) {
+          setStrategy(refreshed);
+          if (local && !sameStrategy(deck.strategy, refreshed)) onChange({ ...deck, strategy: refreshed });
+        }
+      }
     })().catch((reason) => {
       console.warn(reason);
       if (!cancel) setStatus(reason instanceof Error ? reason.message : 'Could not analyze this deck.');
@@ -374,6 +420,24 @@ function DeckPage({
         <DeckEditor deck={deck} entries={entries} decks={decks} onChange={onChange} onDone={onDone} />
       ) : (
         <>
+          {strategy && (
+            <StrategyPanel
+              strategy={strategy}
+              editable={local}
+              onNotes={(notes) => {
+                const next = { ...strategy };
+                if (notes.trim()) next.notes = notes.trim();
+                else delete next.notes;
+                onChange({ ...deck, strategy: next });
+              }}
+              onRegenerate={local ? () => {
+                void describeRecord(deck, report?.roles).then((described) => {
+                  setStrategy(described);
+                  onChange({ ...deck, strategy: described });
+                }).catch((error) => console.warn(error));
+              } : undefined}
+            />
+          )}
           {status && <p role="status">{status}</p>}
           {report && (
             <DeckBody
@@ -543,4 +607,61 @@ function quickHealth(count: number, target: number): number {
 
 function healthTone(count: number, target: number): string {
   return Math.abs(count - target) <= 2 ? 'ok' : 'low';
+}
+
+function describeCached(deck: DeckRecord): DeckStrategy | null {
+  const lines = playingLines(deck);
+  const cached = cachedLines(lines);
+  const found = cached.filter(Boolean).length;
+  if (found < Math.max(8, Math.floor(lines.length * 0.6))) return null;
+  return describeFromPrintings(deck, lines.map((line, index) => sourceFromLine(line, cached[index])));
+}
+
+async function describeRecord(deck: DeckRecord, roles?: DeckReport['roles']): Promise<DeckStrategy> {
+  const lines = playingLines(deck);
+  const printings = await resolveLines(lines);
+  const byKey = new Map(printings.map((card) => [`${card.set}|${card.collectorNumber.toLowerCase()}`, card]));
+  const byName = new Map(printings.map((card) => [card.name.toLowerCase(), card]));
+  const cards = lines.map((line) => sourceFromLine(line, line.set && line.collectorNumber
+    ? byKey.get(`${line.set}|${line.collectorNumber.toLowerCase()}`)
+    : byName.get(line.name.toLowerCase())));
+  let bracket = null;
+  if (deck.format === 'commander') {
+    const review = reviewCards(cards.map((card) => ({ name: card.name, typeLine: card.typeLine, oracleText: card.oracleText, cmc: card.cmc })), await loadGameChangers());
+    bracket = {
+      label: review.label,
+      estimated: review.estimated,
+      gameChangers: review.gameChangers,
+      tutors: review.tutors,
+      fastMana: review.fastMana,
+      extraTurns: review.extraTurns,
+      massLandDenial: review.massLandDenial,
+      combos: review.combos,
+    };
+  }
+  return describeFromPrintings(deck, cards, roles, bracket);
+}
+
+function describeFromPrintings(deck: DeckRecord, cards: StrategySource[], roles?: DeckReport['roles'], bracket: StrategyBracket | null = null): DeckStrategy {
+  const commanderNames = new Set(deck.commanders.map((name) => normalizeName(name)));
+  return describeDeck({
+    commanders: cards.filter((card) => commanderNames.has(normalizeName(card.name))),
+    cards: cards.filter((card) => !commanderNames.has(normalizeName(card.name))),
+    roles: roles?.map((role) => ({ id: role.id, label: role.label, level: role.level, count: role.count })),
+    bracket,
+  });
+}
+
+function sourceFromLine(line: DeckCardLine, printing: CachedPrinting | undefined): StrategySource {
+  const roles: RoleId[] = printing ? mergeRoles(inferRoles(printing.typeLine, printing.oracleText), tagsFor(printing.oracleId)) : [];
+  return {
+    name: printing?.name || line.name,
+    qty: line.qty,
+    cmc: printing?.cmc ?? 0,
+    typeLine: printing?.typeLine ?? '',
+    oracleText: printing?.oracleText ?? '',
+    keywords: printing?.keywords ?? [],
+    roles,
+    colors: printing?.colorIdentity ?? [],
+  };
 }

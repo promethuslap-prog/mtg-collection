@@ -44,6 +44,7 @@ export interface DeckRecord {
   pasted?: boolean;
   ignoreLegality?: boolean;
   includeUncards?: boolean;
+  strategy?: import('./strategy').DeckStrategy;
 }
 
 export interface DeckFile {

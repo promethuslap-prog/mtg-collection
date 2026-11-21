@@ -89,6 +89,7 @@ export function duplicateDeck(source: DeckRecord): DeckRecord {
     origin: 'local',
     ...(source.ignoreLegality ? { ignoreLegality: true } : {}),
     ...(source.includeUncards ? { includeUncards: true } : {}),
+    ...(source.strategy ? { strategy: source.strategy } : {}),
   };
 }
 
@@ -283,6 +284,29 @@ function normalizeDeck(value: unknown): DeckRecord | null {
     origin: 'local',
     ...(deck.ignoreLegality ? { ignoreLegality: true } : {}),
     ...(deck.includeUncards ? { includeUncards: true } : {}),
+    ...(readStrategy(deck.strategy) ? { strategy: readStrategy(deck.strategy) } : {}),
+  };
+}
+
+function readStrategy(value: unknown): DeckRecord['strategy'] | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const strategy = value as Partial<NonNullable<DeckRecord['strategy']>>;
+  if (typeof strategy.archetype !== 'string' || typeof strategy.overview !== 'string') return undefined;
+  const list = (item: unknown) => Array.isArray(item) ? item.filter((line): line is string => typeof line === 'string') : [];
+  return {
+    archetype: strategy.archetype,
+    overview: strategy.overview,
+    early: typeof strategy.early === 'string' ? strategy.early : '',
+    mid: typeof strategy.mid === 'string' ? strategy.mid : '',
+    late: typeof strategy.late === 'string' ? strategy.late : '',
+    synergies: list(strategy.synergies),
+    wins: list(strategy.wins),
+    mulligan: typeof strategy.mulligan === 'string' ? strategy.mulligan : '',
+    strengths: typeof strategy.strengths === 'string' ? strategy.strengths : '',
+    weaknesses: typeof strategy.weaknesses === 'string' ? strategy.weaknesses : '',
+    playAround: typeof strategy.playAround === 'string' ? strategy.playAround : '',
+    bracketNote: typeof strategy.bracketNote === 'string' ? strategy.bracketNote : '',
+    ...(typeof strategy.notes === 'string' && strategy.notes.trim() ? { notes: strategy.notes } : {}),
   };
 }
 

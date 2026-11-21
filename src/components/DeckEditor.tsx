@@ -13,6 +13,7 @@ import {
 } from '../deckData';
 import { DECK_FORMATS, deckSize, formatSpec, formatTarget, linesOf, playingLines, type DeckCardLine, type DeckFormat, type DeckRecord, type DeckSectionName } from '../deckModel';
 import { downloadText } from '../io';
+import { strategyComments } from '../strategy';
 import { autocomplete, searchOrdered, searchPrintings } from '../scryfall';
 import { normalizeName } from '../text';
 import { commanderCompanion, createUserDeck, foilMark, sectionLabel, toMoxfieldText, upsertLine, userDeckFromText, withSection } from '../userDecks';
@@ -384,7 +385,9 @@ export function DeckEditor({ deck, entries, decks, onChange, onDone }: DeckEdito
 
 export function DeckExport({ deck }: { deck: DeckRecord }) {
   const [note, setNote] = useState('');
-  const text = toMoxfieldText(deck);
+  const [includeStrategy, setIncludeStrategy] = useState(false);
+  const list = toMoxfieldText(deck);
+  const text = includeStrategy && deck.strategy ? `${strategyComments(deck.strategy)}\n\n${list}` : list;
   return (
     <div className="export-box">
       <div className="row-actions">
@@ -392,7 +395,7 @@ export function DeckExport({ deck }: { deck: DeckRecord }) {
           type="button"
           className="btn"
           onClick={() => {
-            void navigator.clipboard.writeText(text).then(
+            void navigator.clipboard.writeText(list).then(
               () => setNote('Copied the Moxfield list.'),
               () => setNote('Select the list below and copy it.'),
             );
@@ -408,9 +411,13 @@ export function DeckExport({ deck }: { deck: DeckRecord }) {
           Download .txt
         </button>
       </div>
+      <label className="check">
+        <input type="checkbox" checked={includeStrategy} onChange={(event) => setIncludeStrategy(event.target.checked)} />
+        Include strategy notes
+      </label>
       <label className="field">
         Moxfield list
-        <textarea readOnly rows={4} value={text} aria-label="Moxfield list" />
+        <textarea readOnly rows={4} value={list} aria-label="Moxfield list" />
       </label>
       {note && <p role="status">{note}</p>}
     </div>
