@@ -200,6 +200,31 @@ export async function searchByQuery(query: string, signal?: AbortSignal, maxPage
   return cards;
 }
 
+export async function fetchCardBySetNumber(set: string, number: string, signal?: AbortSignal): Promise<ScryfallCard | null> {
+  const stripped = number.replace(/^0+(?=\d)/, '');
+  const candidates = stripped === number ? [number] : [stripped, number];
+  for (const collector of candidates) {
+    try {
+      return await getJson<ScryfallCard>(`${API}/cards/${encodeURIComponent(set.toLowerCase())}/${encodeURIComponent(collector)}`, GAP_SEARCH_MS, signal);
+    } catch (error) {
+      if (error instanceof ScryfallError && (error.status === 404 || error.status === 400)) continue;
+      throw error;
+    }
+  }
+  return null;
+}
+
+export async function fetchNamedFuzzy(name: string, signal?: AbortSignal): Promise<ScryfallCard | null> {
+  const trimmed = name.trim();
+  if (trimmed.length < 2) return null;
+  try {
+    return await getJson<ScryfallCard>(`${API}/cards/named?fuzzy=${encodeURIComponent(trimmed)}`, GAP_SEARCH_MS, signal);
+  } catch (error) {
+    if (error instanceof ScryfallError && error.status === 404) return null;
+    throw error;
+  }
+}
+
 export async function fetchCollection(
   identifiers: CardIdentifier[],
   onProgress?: (done: number, total: number) => void,

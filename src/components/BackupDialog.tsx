@@ -216,7 +216,7 @@ export function BackupDialog({ entries, pricesUpdatedAt, onClose, onApply, onCle
               </button>
             </div>
           ) : (
-            <button type="button" className="btn danger" disabled={!entries.some((entry) => !entry.source || entry.source === 'manual')} onClick={() => setClearArmed(true)}>
+            <button type="button" className="btn danger" disabled={!entries.some((entry) => !entry.source || entry.source === 'manual' || entry.source === 'scanned')} onClick={() => setClearArmed(true)}>
               Clear collection
             </button>
           )}

@@ -1,6 +1,6 @@
 export type Finish = 'nonfoil' | 'foil' | 'etched';
 
-export type CardSource = 'manual' | 'moxfield' | 'tcgplayer';
+export type CardSource = 'manual' | 'moxfield' | 'tcgplayer' | 'scanned';
 
 export type ViewMode = 'grid' | 'list';
 
@@ -34,6 +34,8 @@ export interface CollectionEntry {
   scryfallUri: string;
   artist?: string;
   condition?: string;
+  language?: string;
+  scannedAt?: number;
   fromTcgplayer?: boolean;
   source?: CardSource;
 }
@@ -46,6 +48,7 @@ export interface Filters {
   set: string;
   tcgplayer: boolean;
   moxfield: boolean;
+  scanned: boolean;
 }
 
 export const EMPTY_FILTERS: Filters = {
@@ -56,4 +59,5 @@ export const EMPTY_FILTERS: Filters = {
   set: '',
   tcgplayer: false,
   moxfield: false,
+  scanned: false,
 };

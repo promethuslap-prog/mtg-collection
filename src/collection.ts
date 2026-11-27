@@ -96,9 +96,9 @@ export function matchesColor(identity: string[], selected: string[]): boolean {
 }
 
 export function matchesFilters(entry: CollectionEntry, filters: Filters): boolean {
-  if (filters.moxfield || filters.tcgplayer) {
+  if (filters.moxfield || filters.tcgplayer || filters.scanned) {
     const source = entry.source ?? (entry.fromTcgplayer ? 'tcgplayer' : 'manual');
-    const selected = (filters.moxfield && source === 'moxfield') || (filters.tcgplayer && source === 'tcgplayer');
+    const selected = (filters.moxfield && source === 'moxfield') || (filters.tcgplayer && source === 'tcgplayer') || (filters.scanned && source === 'scanned');
     if (!selected) return false;
   }
   if (!matchesColor(entry.colorIdentity, filters.colors)) return false;
@@ -114,6 +114,10 @@ export function matchesFilters(entry: CollectionEntry, filters: Filters): boolea
     [entry.name, entry.typeLine, entry.setName, entry.set, entry.collectorNumber, entry.artist ?? ''].join(' '),
   );
   return haystack.includes(query);
+}
+
+export function canEditEntry(entry: CollectionEntry): boolean {
+  return entry.source == null || entry.source === 'manual' || entry.source === 'scanned';
 }
 
 export function filterEntries(entries: CollectionEntry[], filters: Filters): CollectionEntry[] {

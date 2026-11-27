@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { finishLabel, formatUsd, priceLabel, rarityLabel } from '../format';
-import { unitPrice } from '../collection';
+import { canEditEntry, unitPrice } from '../collection';
 import type { CollectionEntry } from '../types';
 import { Modal } from './Modal';
 import { Pips, rarityClass } from './bits';
@@ -67,6 +67,12 @@ export function CardDetail({ entry, onClose, onQuantity, onRemove }: CardDetailP
                 <dd>Moxfield</dd>
               </div>
             )}
+            {entry.source === 'scanned' && (
+              <div>
+                <dt>Source</dt>
+                <dd>Scanned{entry.scannedAt ? ` · ${new Date(entry.scannedAt).toLocaleDateString()}` : ''}</dd>
+              </div>
+            )}
             <div>
               <dt>Market price</dt>
               <dd>
@@ -87,7 +93,7 @@ export function CardDetail({ entry, onClose, onQuantity, onRemove }: CardDetailP
               </div>
             )}
           </dl>
-          {entry.source === 'manual' || !entry.source ? (
+          {canEditEntry(entry) ? (
             <>
               <div className="field">
                 <span>Quantity</span>

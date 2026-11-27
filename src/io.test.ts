@@ -26,6 +26,9 @@ describe('backup files', () => {
     expect(parsed.error).toBeNull();
     expect(parsed.pricesUpdatedAt).toBe(80);
     expect(parsed.entries[0]).toMatchObject({ name: entry.name, quantity: 2, scryfallId: 'id-1', colorIdentity: ['W', 'U'] });
+    const scanned = { ...entry, source: 'scanned' as const, language: 'en', scannedAt: 90, condition: 'Near Mint' };
+    const restored = parseCollectionJson(serializeCollection([scanned], null));
+    expect(restored.entries[0]).toMatchObject({ source: 'scanned', language: 'en', scannedAt: 90, id: 'scanned:id-1:nonfoil:en' });
   });
 
   it('round-trips CSV including quotes in the name', () => {

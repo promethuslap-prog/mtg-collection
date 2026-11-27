@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AddCard } from './components/AddCard';
+import { CardScanner } from './components/CardScanner';
 import { DecksSection } from './components/Decks';
 import { BackupDialog } from './components/BackupDialog';
 import { CardDetail } from './components/CardDetail';
@@ -11,6 +12,8 @@ import { entryKey, updateEntryFromCard } from './cards';
 import { loadPurchaseFile, resolvePurchaseOrders } from './importPurchases';
 import { layerChangeNote, manualEntriesAfterImport } from './layers';
 import { syncDerivedLayers } from './syncLayers';
+import { downloadText } from './io';
+import { moxfieldScanCsv, moxfieldScanText } from './scanExport';
 import { loadBinder, saveBinder } from './storage';
 import { countNoun, finishLabel, formatSyncDate } from './format';
 import { EMPTY_FILTERS, type CollectionEntry, type Filters, type SortKey, type ViewMode } from './types';
@@ -39,6 +42,8 @@ export function App() {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [toast, setToast] = useState<Toast | null>(null);
   const [backupOpen, setBackupOpen] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [clearScansArmed, setClearScansArmed] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [section, setSection] = useState<'collection' | 'decks'>('collection');
   const [refreshing, setRefreshing] = useState(false);
@@ -88,6 +93,22 @@ export function App() {
     if (toastTimer.current) window.clearTimeout(toastTimer.current);
     setToast({ text, action });
     toastTimer.current = window.setTimeout(() => setToast(null), action ? 7000 : 3600);
+  }
+
+  function addScanned(incoming: CollectionEntry[]) {
+    const next = mergeIntoCollection(manualRef.current, incoming);
+    manualRef.current = next;
+    setManualEntries(next);
+    const cards = incoming.reduce((sum, entry) => sum + entry.quantity, 0);
+    showToast(`Added ${countNoun(cards, 'scanned card')}`);
+  }
+
+  function clearScans() {
+    const next = manualRef.current.filter((entry) => entry.source !== 'scanned');
+    manualRef.current = next;
+    setManualEntries(next);
+    setClearScansArmed(false);
+    showToast('Cleared scanned cards on this device. Moxfield is unchanged.');
   }
 
   function addEntry(entry: CollectionEntry) {
@@ -265,6 +286,30 @@ export function App() {
 
       <main>
         {section === 'decks' ? <DecksSection entries={entries} /> : <>
+        <div className="scan-launch">
+          <button type="button" className="btn primary scan-btn" onClick={() => setScanning(true)}>Scan cards</button>
+          {manualEntries.some((entry) => entry.source === 'scanned') && (
+            <>
+              <button type="button" className="btn" onClick={() => downloadText('moxfield-scans.csv', moxfieldScanCsv(manualEntries.filter((entry) => entry.source === 'scanned')), 'text/csv')}>Export scans for Moxfield</button>
+              <button type="button" className="btn" onClick={() => void navigator.clipboard.writeText(moxfieldScanText(manualEntries.filter((entry) => entry.source === 'scanned'))).then(() => showToast('Copied scans as text.'))}>Copy as text</button>
+              {clearScansArmed ? (
+                <>
+                  <button type="button" className="btn" onClick={clearScans}>Clear scanned cards</button>
+                  <button type="button" className="btn" onClick={() => setClearScansArmed(false)}>Cancel</button>
+                </>
+              ) : (
+                <button type="button" className="btn" onClick={() => setClearScansArmed(true)}>Clear exported scans</button>
+              )}
+            </>
+          )}
+        </div>
+        {scanning && (
+          <CardScanner
+            entries={entries}
+            onClose={() => setScanning(false)}
+            onCommit={addScanned}
+          />
+        )}
         <AddCard entries={entries} onAdd={addEntry} />
         <Stats
           entries={entries}
@@ -328,8 +373,13 @@ export function App() {
           }}
           onApply={(incoming, mode, nextPrices) => {
             const manualIncoming = incoming
-              .filter((entry) => (entry.source ?? (entry.fromTcgplayer ? 'tcgplayer' : 'manual')) === 'manual')
-              .map((entry) => ({ ...entry, source: 'manual' as const, id: entryKey(entry.scryfallId, entry.finish) }));
+              .filter((entry) => {
+                const source = entry.source ?? (entry.fromTcgplayer ? 'tcgplayer' : 'manual');
+                return source === 'manual' || source === 'scanned';
+              })
+              .map((entry) => entry.source === 'scanned'
+                ? entry
+                : { ...entry, source: 'manual' as const, id: entryKey(entry.scryfallId, entry.finish) });
             const next = mode === 'replace' ? manualIncoming : mergeIntoCollection(manualRef.current, manualIncoming);
             manualRef.current = next;
             setManualEntries(next);

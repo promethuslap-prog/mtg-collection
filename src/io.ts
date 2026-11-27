@@ -1,4 +1,5 @@
 import { entryKey, parseMoney, safeImage, safeScryfallUri } from './cards';
+import { scannedEntryId } from './scanExport';
 import type { CardSource, CollectionEntry, Finish } from './types';
 
 const CSV_COLUMNS = [
@@ -56,10 +57,11 @@ export function sanitizeEntry(value: unknown): CollectionEntry | null {
   if (!Number.isFinite(quantity) || quantity < 1) return null;
   const scryfallId = entry.scryfallId.trim();
   const imageBack = safeImage(typeof entry.imageBack === 'string' ? entry.imageBack : undefined);
-  const source: CardSource = entry.source === 'moxfield' || entry.source === 'tcgplayer' || entry.source === 'manual' ? entry.source : 'manual';
+  const source: CardSource = entry.source === 'moxfield' || entry.source === 'tcgplayer' || entry.source === 'manual' || entry.source === 'scanned' ? entry.source : 'manual';
+  const language = typeof entry.language === 'string' && entry.language.trim() ? entry.language.trim().toLowerCase() : undefined;
   const baseId = entryKey(scryfallId, finish);
   return {
-    id: source === 'manual' ? baseId : `${source}:${baseId}`,
+    id: source === 'scanned' ? scannedEntryId(scryfallId, finish, language || 'en') : source === 'manual' ? baseId : `${source}:${baseId}`,
     scryfallId,
     oracleId: typeof entry.oracleId === 'string' ? entry.oracleId : '',
     name: entry.name.trim(),
@@ -80,6 +82,8 @@ export function sanitizeEntry(value: unknown): CollectionEntry | null {
     scryfallUri: safeScryfallUri(typeof entry.scryfallUri === 'string' ? entry.scryfallUri : undefined) ?? '',
     ...(typeof entry.artist === 'string' && entry.artist ? { artist: entry.artist } : {}),
     ...(typeof entry.condition === 'string' && entry.condition.trim() ? { condition: entry.condition.trim() } : {}),
+    ...(language ? { language } : {}),
+    ...(typeof entry.scannedAt === 'number' && Number.isFinite(entry.scannedAt) ? { scannedAt: entry.scannedAt } : {}),
     ...(entry.fromTcgplayer === true ? { fromTcgplayer: true } : {}),
     source,
   };
